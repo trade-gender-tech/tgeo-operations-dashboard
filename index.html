@@ -656,20 +656,6 @@ td.actions-cell{white-space:nowrap; text-align:right;}
       <!-- SETTINGS -->
       <div class="view" id="view-settings">
         <div class="panel">
-          <div class="panel-head"><div><h2>Data &amp; Sync</h2><div class="desc">Connect this dashboard to a Google Sheet so the whole team sees live, shared data</div></div></div>
-          <div class="form-row">
-            <label>Google Apps Script Web App URL</label>
-            <input type="text" id="sheetsUrlInput" placeholder="https://script.google.com/macros/s/XXXXX/exec">
-          </div>
-          <div style="display:flex; gap:10px;">
-            <button class="btn btn-primary" id="btnSaveSheetsUrl">Connect</button>
-            <button class="btn btn-danger" id="btnDisconnectSheets">Disconnect</button>
-          </div>
-          <p style="font-size:12px; color:var(--text-dim); margin-top:14px; line-height:1.6;">
-            The Google Sheet should have three tabs named exactly <b>IWG</b>, <b>CAPACITY BUILDING</b> and <b>RESEARCH</b>. Once connected, every add/edit/delete in this dashboard writes directly to the matching tab, and reloading pulls the latest shared data — no Excel file needed. Until then, the dashboard works fully offline using the embedded dataset plus your browser's local storage, and you can use "Open Excel" / "Save to Excel" to sync manually.
-          </p>
-        </div>
-        <div class="panel">
           <div class="panel-head"><div><h2>Team Members</h2><div class="desc">Manage who can be assigned to tasks and to-do items</div></div></div>
           <div id="teamMemberManageList" style="margin-bottom:16px;"></div>
           <div style="display:flex; gap:10px;">
@@ -1132,12 +1118,6 @@ async function connectSheets(url){
     toast('Could not reach that Sheet URL. Check the deployment and try again.', 'error');
   }
 }
-function disconnectSheets(){
-  state.sheetsUrl = '';
-  persistLocal();
-  updateConnPill();
-  toast('Disconnected — working from local data');
-}
 /* ---------------- STRUCTURE MANAGEMENT: CATEGORIES / TASK TYPES / SUB-CATEGORIES ---------------- */
 function renderCategoryManage(){
   document.getElementById('categoryManageList').innerHTML = state.categories.map(cat=>{
@@ -1309,7 +1289,6 @@ function deleteSubCat(catKey, name){
 function updateConnPill(){
   const pill = document.getElementById('connPill');
   const label = document.getElementById('connLabel');
-  document.getElementById('sheetsUrlInput').value = state.sheetsUrl || '';
   if(sheetsConnected()){
     pill.className = 'conn-pill connected';
     label.textContent = 'Synced to Google Sheet';
@@ -1589,7 +1568,7 @@ function switchView(view, opts){
     todo:['To-Do List','Quick team checklist'],
     notes:['Notes','Freeform team notes'],
     formstack:['Formstack Forms','Live form response tracking'],
-    settings:['Data & Sync','Connect to Google Sheets']
+    settings:['Settings','Manage team members, workstreams, task types and sub-categories']
   };
   document.getElementById('topTitle').textContent = titles[view][0];
   document.getElementById('topSub').textContent = titles[view][1];
@@ -2456,12 +2435,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     inp.value=''; persistLocal(); renderNotes();
   });
 
-  document.getElementById('btnSaveSheetsUrl').addEventListener('click', ()=>{
-    const url = document.getElementById('sheetsUrlInput').value.trim();
-    if(!url){ toast('Paste the Apps Script Web App URL first', 'error'); return; }
-    connectSheets(url);
-  });
-  document.getElementById('btnDisconnectSheets').addEventListener('click', disconnectSheets);
   document.getElementById('btnAddCategory').addEventListener('click', addCategory);
   document.getElementById('newCategoryInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') addCategory(); });
   document.getElementById('btnAddTaskType').addEventListener('click', addTaskType);
