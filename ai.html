@@ -2491,11 +2491,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
 .ai-head-actions{display:flex; gap:6px; flex-shrink:0;}
 .ai-icon-btn{width:26px; height:26px; border-radius:8px; background:rgba(255,255,255,0.18); display:flex; align-items:center; justify-content:center; cursor:pointer;}
 .ai-icon-btn svg{width:14px; height:14px;}
-.ai-key-row{display:none; padding:12px 14px; gap:8px; border-bottom:1px solid var(--border); background:var(--panel-2);}
-.ai-key-row.open{display:flex;}
-.ai-key-row input{flex:1; background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:12.5px; color:var(--text); outline:none;}
-.ai-key-hint{padding:0 14px 10px; font-size:10.5px; color:var(--text-faint); line-height:1.4; display:none;}
-.ai-key-hint.open{display:block;}
 .ai-messages{flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px;}
 .ai-msg{max-width:88%; padding:9px 13px; border-radius:14px; font-size:13px; line-height:1.45; white-space:pre-wrap;}
 .ai-msg.user{align-self:flex-end; background:var(--grad-main); color:#fff; border-bottom-right-radius:4px;}
@@ -2527,21 +2522,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
 </button>
 <div class="ai-panel" id="aiPanel">
   <div class="ai-panel-head">
-    <div><b>Dashboard Assistant</b><span>Prototype — create &amp; update tasks</span></div>
+    <div><b>Dashboard Assistant</b><span>Create &amp; update tasks</span></div>
     <div class="ai-head-actions">
-      <div class="ai-icon-btn" id="aiKeyBtn" title="Set Gemini API key">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 11-12 0 6 6 0 0112 0zM3 21l4.35-4.35"/></svg>
-      </div>
       <div class="ai-icon-btn" id="aiPanelClose">
         <svg fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
       </div>
     </div>
   </div>
-  <div class="ai-key-row" id="aiKeyRow">
-    <input type="password" id="aiKeyInput" placeholder="Paste your Gemini API key">
-    <button class="btn btn-sm btn-primary" id="aiKeySave">Save</button>
-  </div>
-  <div class="ai-key-hint" id="aiKeyHint">Free key from <b>aistudio.google.com/apikey</b> — stored only in this browser, never leaves your machine except to call Gemini directly.</div>
   <div class="ai-messages" id="aiMessages"></div>
   <div class="ai-input-row">
     <input type="text" id="aiInput" placeholder="e.g. Add a task for the IWG prize ceremony...">
@@ -2552,24 +2539,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
 </div>
 
 <script>
-/* ================= AI ASSISTANT PROTOTYPE (local-only) =================
-   Calls Gemini directly from the browser using a key you paste in.
-   This is a PROTOTYPE pattern only — before this ever goes to GitHub Pages,
-   swap callAiBackend() for a call to the Apps Script "aiChat" action instead,
-   so the API key lives server-side and never sits in a publicly-hosted file.
-   ========================================================================= */
-
-const GEMINI_KEY_LS = 'tgeo_gemini_key_v1';
-const GEMINI_MODEL = 'gemini-3.1-flash-lite';
-
-function getGeminiKey(){
-  const raw = localStorage.getItem(GEMINI_KEY_LS);
-  if(!raw) return '';
-  try{ return decryptText(raw, SHARED_DB_KEY); }catch(e){ return ''; }
-}
-function setGeminiKeyLocal(key){
-  localStorage.setItem(GEMINI_KEY_LS, encryptText(key, SHARED_DB_KEY));
-}
+/* ================= AI ASSISTANT =================
+   Calls the connected Google Sheet's Apps Script "aiChat" action, which holds
+   the Gemini key server-side (Script Properties) and proxies the request.
+   Nothing here ever sees or stores an API key.
+   ================================================= */
 
 const AI_TOOLS = [{
   functionDeclarations: [
@@ -2764,26 +2738,17 @@ const AI_TOOL_IMPL = {
   record_task_closure: aiToolRecordClosure
 };
 
-/* ---- Backend call: PROTOTYPE calls Gemini directly. Swap this for an Apps Script
-   "aiChat" POST once moving off the local prototype, so the key stays server-side. ---- */
 async function callAiBackend(contents){
-  const apiKey = getGeminiKey();
-  if(!apiKey) throw new Error('No Gemini API key set yet — click the key icon above to add one.');
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/'+GEMINI_MODEL+':generateContent?key='+apiKey;
-  const res = await fetch(url, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
-      contents,
-      tools: AI_TOOLS,
-      systemInstruction: { parts:[{ text: buildAiSystemInstruction() }] }
-    })
+  if(!sheetsConnected()) throw new Error('Connect your Google Sheet first (Settings) — the assistant runs through it.');
+  const data = await sheetsPost({
+    action: 'aiChat',
+    contents,
+    tools: AI_TOOLS,
+    systemInstruction: buildAiSystemInstruction()
   });
-  const data = await res.json();
-  if(!res.ok) throw new Error((data.error && data.error.message) || ('Gemini API error '+res.status));
-  const candidate = data.candidates && data.candidates[0] && data.candidates[0].content;
-  if(!candidate) throw new Error('No response from Gemini.');
-  return candidate;
+  if(!data.ok) throw new Error(data.error || 'Assistant backend error.');
+  if(!data.candidate) throw new Error('No response from the assistant.');
+  return data.candidate;
 }
 
 let aiHistory = [];
@@ -2952,26 +2917,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
     panel.classList.toggle('open');
     if(panel.classList.contains('open')){
       document.getElementById('aiInput').focus();
-      if(!getGeminiKey()){
-        document.getElementById('aiKeyRow').classList.add('open');
-        document.getElementById('aiKeyHint').classList.add('open');
+      if(!sheetsConnected() && document.getElementById('aiMessages').children.length===0){
+        addAiMessageToUI('assistant', 'Connect your Google Sheet first (gear icon in the sidebar) — the assistant runs through it.');
       }
     }
   });
   document.getElementById('aiPanelClose').addEventListener('click', ()=> panel.classList.remove('open'));
-  document.getElementById('aiKeyBtn').addEventListener('click', ()=>{
-    document.getElementById('aiKeyRow').classList.toggle('open');
-    document.getElementById('aiKeyHint').classList.toggle('open');
-  });
-  document.getElementById('aiKeySave').addEventListener('click', ()=>{
-    const val = document.getElementById('aiKeyInput').value.trim();
-    if(!val) return;
-    setGeminiKeyLocal(val);
-    document.getElementById('aiKeyInput').value = '';
-    document.getElementById('aiKeyRow').classList.remove('open');
-    document.getElementById('aiKeyHint').classList.remove('open');
-    addAiMessageToUI('assistant', 'API key saved locally. What would you like to do?');
-  });
   document.getElementById('aiSendBtn').addEventListener('click', sendAiMessage);
   document.getElementById('aiInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') sendAiMessage(); });
 });
