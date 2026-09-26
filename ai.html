@@ -1535,6 +1535,16 @@ function progressPct(tasks){
   const done = tasks.filter(t=>t.status==='Done').length;
   return Math.round((done/tasks.length)*100);
 }
+function activityStage(tasks){
+  const active = tasks.filter(t=>t.status!=='Cancelled');
+  if(!active.length) return 'Upcoming';
+  const done = active.filter(t=>t.status==='Done').length;
+  const inProgress = active.filter(t=>t.status==='In progress').length;
+  if(done === active.length) return 'Completed';
+  if(done === 0 && inProgress === 0) return 'Upcoming';
+  return 'Ongoing';
+}
+const ACTIVITY_STAGE_BADGE = { Completed:'badge-done', Ongoing:'badge-progress', Upcoming:'badge-upcoming' };
 
 /* ---------------- NAV / VIEW SWITCHING ---------------- */
 function switchView(view, opts){
@@ -1863,9 +1873,10 @@ function renderCategoryView(){
     const actNames = Object.keys(acts);
     body.innerHTML = `<div class="card-grid">` + actNames.map(ac=>{
       const tasks = acts[ac];
+      const stage = activityStage(tasks);
       return `<div class="entity-card" data-act="${escapeHtml(ac)}">
         <div class="entity-card-top">
-          <div><h3>${escapeHtml(ac)}</h3><div class="meta">${tasks.length} ${tasks.length===1?'task':'tasks'}</div></div>
+          <div><h3>${escapeHtml(ac)}</h3><div class="meta">${tasks.length} ${tasks.length===1?'task':'tasks'} &nbsp;<span class="badge ${ACTIVITY_STAGE_BADGE[stage]}">${stage}</span></div></div>
           <div class="entity-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
         </div>
         <div class="progress-track"><div class="progress-fill" style="width:${progressPct(tasks)}%"></div></div>
