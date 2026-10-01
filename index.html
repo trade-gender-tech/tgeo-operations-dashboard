@@ -40,6 +40,7 @@
   --badge-upcoming-bg: var(--amber-pale); --badge-upcoming-text:#b45309;
   --badge-notstarted-bg: rgba(114,109,135,0.10); --badge-notstarted-text: var(--text-dim);
   --badge-cancelled-bg: var(--rose-pale); --badge-cancelled-text:#c81e3a;
+  --badge-delayed-bg: #ffe4d5; --badge-delayed-text:#c2410c;
   --badge-check-bg: var(--pink-pale); --badge-check-text:#be185d;
 }
 *{box-sizing:border-box; margin:0; padding:0;}
@@ -174,6 +175,7 @@ a, button, .btn, .nav-item, .chip, .icon-btn, .entity-card, .kpi-card, .ring-car
 .ring-value{font-size:19px; font-weight:800; letter-spacing:-.3px;}
 .ring-name{font-size:12px; font-weight:700; color:var(--text-dim); margin-top:13px;}
 .ring-sub{font-size:10.5px; color:var(--text-faint); margin-top:2px; font-weight:600;}
+.ring-wrap.plain-stat{display:flex; align-items:center; justify-content:center;}
 
 /* ---------- CATEGORY SNAPSHOT CARDS ---------- */
 .catcard-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:16px; margin-bottom:20px;}
@@ -224,6 +226,7 @@ a, button, .btn, .nav-item, .chip, .icon-btn, .entity-card, .kpi-card, .ring-car
 .badge-upcoming{background:var(--badge-upcoming-bg); color:var(--badge-upcoming-text);}
 .badge-notstarted{background:var(--badge-notstarted-bg); color:var(--badge-notstarted-text);}
 .badge-cancelled{background:var(--badge-cancelled-bg); color:var(--badge-cancelled-text); text-decoration:line-through;}
+.badge-delayed{background:var(--badge-delayed-bg); color:var(--badge-delayed-text);}
 .badge-check{background:var(--badge-check-bg); color:var(--badge-check-text);}
 .badge-cat{font-size:10px; font-weight:700; padding:3px 9px; border-radius:20px;}
 
@@ -467,6 +470,11 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
 .checklist-row .cl-remove{width:26px; height:26px; flex-shrink:0;}
 .checklist-empty{font-size:12px; color:var(--text-faint); font-weight:600; display:none;}
 .checklist-empty.show{display:block;}
+.linked-activity-row{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
+.linked-activity-row .la-select{flex:1; min-width:0; background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:13px; color:var(--text); outline:none;}
+.linked-activity-row .la-remove{width:26px; height:26px; flex-shrink:0;}
+.linked-activity-chip{display:inline-flex; align-items:center; gap:6px; background:var(--violet-pale); border:1px solid var(--violet-pale-2); color:var(--violet); border-radius:20px; padding:5px 12px; font-size:11.5px; font-weight:700; cursor:pointer; margin:3px 6px 3px 0;}
+.linked-activity-chip:hover{background:var(--violet-pale-2);}
 
 /* ---------- FORMSTACK TABS ---------- */
 .fs-tabs{display:flex; gap:8px; margin-bottom:16px;}
@@ -718,6 +726,12 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
             <button class="btn btn-primary" id="btnAddSubCat">Add Sub-Category</button>
           </div>
         </div>
+
+        <div class="panel">
+          <div class="panel-head"><div><h2>Activities</h2><div class="desc">Rename an activity — every task under it (and any task linked to it) updates automatically</div></div></div>
+          <div class="form-row"><label>Workstream</label><select id="activityManageCategory"></select></div>
+          <div id="activityManageList"></div>
+        </div>
       </div>
 
     </div>
@@ -768,6 +782,14 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
         </div>
         <div id="checklistItems"></div>
         <div class="checklist-empty" id="checklistEmptyNote">No to-do items yet — add one above.</div>
+      </div>
+      <div class="checklist-box">
+        <div class="checklist-head">
+          <label>Linked Activities</label>
+          <button type="button" class="btn btn-sm" id="btnAddLinkedActivity">+ Link Activity</button>
+        </div>
+        <div id="linkedActivityItems"></div>
+        <div class="checklist-empty" id="linkedActivityEmptyNote">No linked activities yet — link this task to another activity it relates to.</div>
       </div>
       <div class="form-row"><label>Task (Description)</label><textarea id="f_description"></textarea></div>
       <div class="form-grid">
@@ -1108,7 +1130,8 @@ function taskToSheetRow(t){
     CompletionDate: t.completionDate||'', HoursSpent: t.hoursSpent||'', NDrivePath: t.nDrivePath||'',
     ClosureNotes: t.closureNotes||'', CancellationCategory: t.cancellationCategory||'',
     PrivateNotes: JSON.stringify(t.privateNotes||{}),
-    Checklist: JSON.stringify(t.checklist||[])
+    Checklist: JSON.stringify(t.checklist||[]),
+    LinkedActivities: JSON.stringify(t.linkedActivities||[])
   };
 }
 function sheetRowToTask(r){
@@ -1116,13 +1139,15 @@ function sheetRowToTask(r){
   try{ privateNotes = r.PrivateNotes ? JSON.parse(r.PrivateNotes) : {}; }catch(e){}
   let checklist = [];
   try{ checklist = r.Checklist ? JSON.parse(r.Checklist) : []; }catch(e){}
+  let linkedActivities = [];
+  try{ linkedActivities = r.LinkedActivities ? JSON.parse(r.LinkedActivities) : []; }catch(e){}
   return {
     id: r.ID, category: tabNameToCategoryKey(r.Category)||'IWG', month: r.Month||'', date: r.Date||'', subCategory: r.SubCategory||'', activity: r.Activity||'',
     taskType: r.TaskType||'', description: r.Task||'', assignedPerson: r.AssignedPerson||'',
     status: r.Status||'Not Started', statusComment: r.StatusComment||'', revisedDate: r.RevisedDate||'',
     links: r.Links||'', comments: r.Comments||'', createdDate: r.CreatedDate||'',
     completionDate: r.CompletionDate||'', hoursSpent: r.HoursSpent||'', nDrivePath: r.NDrivePath||'',
-    closureNotes: r.ClosureNotes||'', cancellationCategory: r.CancellationCategory||'', privateNotes, checklist
+    closureNotes: r.ClosureNotes||'', cancellationCategory: r.CancellationCategory||'', privateNotes, checklist, linkedActivities
   };
 }
 async function sheetsPost(payload){
@@ -1137,6 +1162,12 @@ async function sheetsFetchAll(){
   const json = await res.json();
   if(!json.ok) throw new Error(json.error||'Sheet read failed');
   return { tasks: json.rows.map(sheetRowToTask), forms: (json.forms||[]).map(sheetRowToForm) };
+}
+function syncTasksToSheet(tasks){
+  if(!sheetsConnected() || !tasks.length) return;
+  tasks.forEach(t=>{
+    sheetsPost({action:'update', id:t.id, category: categoryTabName(t.category), data: taskToSheetRow(t)}).catch(()=>{});
+  });
 }
 async function connectSheets(url){
   state.sheetsUrl = url.trim();
@@ -1220,12 +1251,34 @@ function renderTaskTypeManage(){
     return `<div class="manage-row" data-type="${escapeHtml(tt)}">
       <div class="mr-label">${escapeHtml(tt)}</div>
       <div class="mr-count">${count} in use</div>
+      <span class="icon-btn tt-edit-btn" title="Rename type"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.4-9.4a2 2 0 112.8 2.8L11 15l-4 1 1-4z"/></svg></span>
       <span class="icon-btn danger tt-del-btn" title="${count>0?'Still in use':'Delete type'}"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg></span>
     </div>`;
   }).join('');
+  document.querySelectorAll('.tt-edit-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=> renameTaskType(btn.closest('.manage-row').dataset.type));
+  });
   document.querySelectorAll('.tt-del-btn').forEach(btn=>{
     btn.addEventListener('click', ()=> deleteTaskType(btn.closest('.manage-row').dataset.type));
   });
+}
+function renameTaskType(oldName){
+  const newName = prompt('Rename task type "'+oldName+'" to:', oldName);
+  if(newName===null) return;
+  const trimmed = newName.trim();
+  if(!trimmed){ toast('Task type name cannot be empty', 'error'); return; }
+  if(trimmed === oldName) return;
+  if(state.taskTypes.some(t=>t.toLowerCase()===trimmed.toLowerCase() && t!==oldName)){
+    toast('That task type already exists', 'error'); return;
+  }
+  const affected = state.tasks.filter(t=>t.taskType===oldName);
+  state.taskTypes = state.taskTypes.map(t=> t===oldName ? trimmed : t);
+  affected.forEach(t=> t.taskType = trimmed);
+  persistLocal();
+  renderTaskTypeManage();
+  renderAll();
+  toast('Renamed to "'+trimmed+'" — updated '+affected.length+' task(s)');
+  syncTasksToSheet(affected);
 }
 function addTaskType(){
   const input = document.getElementById('newTaskTypeInput');
@@ -1283,6 +1336,32 @@ function populateAssigneeSelect(selectEl, selected){
   selectEl.innerHTML = '<option value="">Unassigned</option>' + state.assignablePeople.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
   selectEl.value = selected || '';
 }
+const ACTIVITY_KEY_SEP = '|||';
+function activityKey(a){ return [a.category, a.subCategory, a.activity].join(ACTIVITY_KEY_SEP); }
+function parseActivityKey(key){
+  const [category, subCategory, activity] = key.split(ACTIVITY_KEY_SEP);
+  return {category, subCategory, activity};
+}
+function getAllActivities(excludeKey){
+  const map = new Map();
+  state.tasks.forEach(t=>{
+    if(!t.activity) return;
+    const a = {category:t.category, subCategory:t.subCategory, activity:t.activity};
+    const key = activityKey(a);
+    if(key===excludeKey) return;
+    if(!map.has(key)) map.set(key, a);
+  });
+  return Array.from(map.values()).sort((x,y)=> activityKey(x).localeCompare(activityKey(y)));
+}
+function activityDisplayLabel(a){
+  const cat = state.categories.find(c=>c.key===a.category);
+  return (cat?cat.label:a.category) + ' › ' + a.subCategory + ' › ' + a.activity;
+}
+function populateActivitySelect(selectEl, selectedKey, excludeKey){
+  const options = getAllActivities(excludeKey);
+  selectEl.innerHTML = '<option value="">Select activity…</option>' + options.map(a=>`<option value="${escapeHtml(activityKey(a))}">${escapeHtml(activityDisplayLabel(a))}</option>`).join('');
+  selectEl.value = selectedKey || '';
+}
 
 function renderSubCatManage(){
   const sel = document.getElementById('subCatManageCategory');
@@ -1322,6 +1401,62 @@ function deleteSubCat(catKey, name){
   persistLocal();
   renderSubCatManage();
   toast('Sub-category deleted');
+}
+
+function renderActivityManage(){
+  const sel = document.getElementById('activityManageCategory');
+  const prevValue = sel.value;
+  sel.innerHTML = state.categories.map(c=>`<option value="${escapeHtml(c.key)}">${escapeHtml(c.label)}</option>`).join('');
+  sel.value = state.categories.some(c=>c.key===prevValue) ? prevValue : state.categories[0].key;
+  const catKey = sel.value;
+  const map = new Map();
+  state.tasks.filter(t=>t.category===catKey && t.activity).forEach(t=>{
+    const key = t.subCategory + ACTIVITY_KEY_SEP + t.activity;
+    if(!map.has(key)) map.set(key, {subCategory:t.subCategory, activity:t.activity, count:0});
+    map.get(key).count++;
+  });
+  const activities = Array.from(map.values()).sort((a,b)=> (a.subCategory+a.activity).localeCompare(b.subCategory+b.activity));
+  document.getElementById('activityManageList').innerHTML = activities.length ? activities.map(a=>`
+    <div class="manage-row" data-sub="${escapeHtml(a.subCategory)}" data-act="${escapeHtml(a.activity)}">
+      <div class="mr-label">${escapeHtml(a.subCategory)} › ${escapeHtml(a.activity)}</div>
+      <div class="mr-count">${a.count} task${a.count===1?'':'s'}</div>
+      <span class="icon-btn act-edit-btn" title="Rename activity"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.4-9.4a2 2 0 112.8 2.8L11 15l-4 1 1-4z"/></svg></span>
+    </div>`).join('') : emptyHtml('No activities yet for this workstream.');
+  document.querySelectorAll('.act-edit-btn').forEach(btn=>{
+    const row = btn.closest('.manage-row');
+    btn.addEventListener('click', ()=> renameActivity(catKey, row.dataset.sub, row.dataset.act));
+  });
+}
+function renameActivity(catKey, subCategory, oldActivity){
+  const newName = prompt('Rename activity "'+oldActivity+'" to:', oldActivity);
+  if(newName===null) return;
+  const trimmed = newName.trim();
+  if(!trimmed){ toast('Activity name cannot be empty', 'error'); return; }
+  if(trimmed === oldActivity) return;
+  const touched = [];
+  state.tasks.forEach(t=>{
+    let changed = false;
+    if(t.category===catKey && t.subCategory===subCategory && t.activity===oldActivity){
+      t.activity = trimmed; changed = true;
+    }
+    if(Array.isArray(t.linkedActivities)){
+      t.linkedActivities.forEach(la=>{
+        if(la.category===catKey && la.subCategory===subCategory && la.activity===oldActivity){
+          la.activity = trimmed; changed = true;
+        }
+      });
+    }
+    if(changed) touched.push(t);
+  });
+  if(!touched.length){ toast('No tasks found for that activity', 'error'); return; }
+  if(state.view.category===catKey && state.view.subCategory===subCategory && state.view.activity===oldActivity){
+    state.view.activity = trimmed;
+  }
+  persistLocal();
+  renderActivityManage();
+  renderAll();
+  toast('Renamed to "'+trimmed+'" — updated '+touched.length+' task(s)');
+  syncTasksToSheet(touched);
 }
 
 function updateConnPill(){
@@ -1364,7 +1499,8 @@ async function saveTaskFromForm(){
     closureNotes: existing ? existing.closureNotes||'' : '',
     cancellationCategory: existing ? existing.cancellationCategory||'' : '',
     privateNotes: existing ? {...(existing.privateNotes||{})} : {},
-    checklist: modalChecklist.filter(it=>it.text.trim()!=='').map(it=>({...it, text: it.text.trim()}))
+    checklist: modalChecklist.filter(it=>it.text.trim()!=='').map(it=>({...it, text: it.text.trim()})),
+    linkedActivities: modalLinkedActivities.filter(Boolean)
   };
   if(!task.description){ toast('Task description is required', 'error'); return; }
 
@@ -1458,6 +1594,34 @@ function renderChecklistItems(){
     row.querySelector('.cl-remove').addEventListener('click', ()=>{ modalChecklist.splice(idx,1); renderChecklistItems(); });
   });
 }
+let modalLinkedActivities = [];
+function currentModalActivityKey(){
+  return activityKey({
+    category: document.getElementById('f_category').value,
+    subCategory: document.getElementById('f_subCategory').value.trim(),
+    activity: document.getElementById('f_activity').value.trim()
+  });
+}
+function renderLinkedActivities(){
+  const box = document.getElementById('linkedActivityItems');
+  const selfKey = currentModalActivityKey();
+  box.innerHTML = modalLinkedActivities.map((item,idx)=>`
+    <div class="linked-activity-row" data-idx="${idx}">
+      <select class="la-select"></select>
+      <span class="icon-btn danger la-remove" title="Remove"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg></span>
+    </div>`).join('');
+  document.getElementById('linkedActivityEmptyNote').classList.toggle('show', modalLinkedActivities.length===0);
+  box.querySelectorAll('.linked-activity-row').forEach(row=>{
+    const idx = parseInt(row.dataset.idx, 10);
+    const item = modalLinkedActivities[idx];
+    const select = row.querySelector('.la-select');
+    populateActivitySelect(select, item ? activityKey(item) : '', selfKey);
+    select.addEventListener('change', (e)=>{
+      modalLinkedActivities[idx] = e.target.value ? parseActivityKey(e.target.value) : null;
+    });
+    row.querySelector('.la-remove').addEventListener('click', ()=>{ modalLinkedActivities.splice(idx,1); renderLinkedActivities(); });
+  });
+}
 function openModal(task, prefill){
   document.getElementById('modalTitle').textContent = task ? 'Edit Task' : 'Add Task';
   document.getElementById('btnDeleteTask').style.display = task ? 'inline-flex' : 'none';
@@ -1474,6 +1638,8 @@ function openModal(task, prefill){
   modalChecklist = task && Array.isArray(task.checklist) ? JSON.parse(JSON.stringify(task.checklist)) : [];
   renderChecklistItems();
   updateChecklistVisibility();
+  modalLinkedActivities = task && Array.isArray(task.linkedActivities) ? JSON.parse(JSON.stringify(task.linkedActivities)) : [];
+  renderLinkedActivities();
   f('f_description', task ? task.description : '');
   populateAssigneeSelect(document.getElementById('f_assignedPerson'), task ? task.assignedPerson : '');
   f('f_status', task ? task.status : 'Upcoming');
@@ -1582,6 +1748,10 @@ function badgeHtml(status){
   const cls = STATUS_CLASS[status] || 'badge-notstarted';
   return `<span class="badge ${cls}">${escapeHtml(status||'Not Started')}</span>`;
 }
+function taskBadgeHtml(t){
+  if(isDelayed(t)) return `<span class="badge badge-delayed">Completed but Delayed</span>`;
+  return badgeHtml(t.status);
+}
 function catBadgeHtml(category){
   const m = catMeta(category);
   return `<span class="badge badge-cat" style="background:${m.bg}; color:${m.fg};">${escapeHtml(category)}</span>`;
@@ -1617,6 +1787,13 @@ function activityStage(tasks){
   return 'Ongoing';
 }
 const ACTIVITY_STAGE_BADGE = { Completed:'badge-done', Ongoing:'badge-progress', Upcoming:'badge-upcoming' };
+function delayDays(t){
+  if(t.status!=='Done' || !t.completionDate || !t.date) return 0;
+  const due = new Date(t.date), done = new Date(t.completionDate);
+  if(isNaN(due) || isNaN(done)) return 0;
+  return Math.round((done - due) / 86400000);
+}
+function isDelayed(t){ return delayDays(t) > 0; }
 
 /* ---------------- NAV / VIEW SWITCHING ---------------- */
 function switchView(view, opts){
@@ -1666,6 +1843,7 @@ function switchView(view, opts){
     renderCategoryManage();
     renderTaskTypeManage();
     renderSubCatManage();
+    renderActivityManage();
     renderTeamMemberManage();
   }
 }
@@ -1737,15 +1915,25 @@ function renderRings(){
   const active = tasks.filter(t=>t.status==='In progress'||t.status==='Upcoming').length;
   const cancelled = tasks.filter(t=>t.status==='Cancelled').length;
   const onTime = tasks.filter(t=>t.status==='Done' && (t.statusComment||'').toLowerCase().includes('on time')).length;
+  const delayedTasks = tasks.filter(isDelayed);
+  const totalDelayDays = delayedTasks.reduce((sum,t)=>sum+delayDays(t), 0);
+  const avgDelay = delayedTasks.length ? Math.round((totalDelayDays/delayedTasks.length)*10)/10 : 0;
   const metrics = [
-    {label:'Overall Completion', pct: Math.round((done/total)*100), sub: done+' of '+total+' tasks', from:'#34d399', to:'#0d9268'},
-    {label:'Active Right Now', pct: Math.round((active/total)*100), sub: active+' in progress / upcoming', from:'#60a5fa', to:'#2563eb'},
-    {label:'On-Time Delivery', pct: done ? Math.round((onTime/done)*100) : 0, sub: onTime+' of '+done+' completed on time', from:'#a78bfa', to:'#7c3aed'},
-    {label:'Cancellation Rate', pct: Math.round((cancelled/total)*100), sub: cancelled+' cancelled', from:'#fb7185', to:'#c81e3a'}
+    {type:'ring', label:'Overall Completion', pct: Math.round((done/total)*100), sub: done+' of '+total+' tasks', from:'#34d399', to:'#0d9268'},
+    {type:'ring', label:'Active Right Now', pct: Math.round((active/total)*100), sub: active+' in progress / upcoming', from:'#60a5fa', to:'#2563eb'},
+    {type:'ring', label:'On-Time Delivery', pct: done ? Math.round((onTime/done)*100) : 0, sub: onTime+' of '+done+' completed on time', from:'#a78bfa', to:'#7c3aed'},
+    {type:'ring', label:'Cancellation Rate', pct: Math.round((cancelled/total)*100), sub: cancelled+' cancelled', from:'#fb7185', to:'#c81e3a'},
+    {type:'plain', label:'Tasks Delayed', value: delayedTasks.length, sub: delayedTasks.length+' of '+done+' completed tasks ran late', color:'#c2410c'},
+    {type:'plain', label:'Avg Delay', value: avgDelay+'d', sub: 'average days late, per delayed task', color:'#c2410c'}
   ];
-  document.getElementById('ringRow').innerHTML = metrics.map((m,i)=>`
+  document.getElementById('ringRow').innerHTML = metrics.map((m,i)=> m.type==='ring' ? `
     <div class="ring-card">
       ${ringSvg(i, m.pct, m.from, m.to)}
+      <div class="ring-name">${escapeHtml(m.label)}</div>
+      <div class="ring-sub">${escapeHtml(m.sub)}</div>
+    </div>` : `
+    <div class="ring-card">
+      <div class="ring-wrap plain-stat"><div class="ring-value" style="color:${m.color}; font-size:28px;">${escapeHtml(String(m.value))}</div></div>
       <div class="ring-name">${escapeHtml(m.label)}</div>
       <div class="ring-sub">${escapeHtml(m.sub)}</div>
     </div>`).join('');
@@ -1985,8 +2173,8 @@ function renderCategoryView(){
         </div>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th style="width:30px;"></th><th>Date</th><th>Task Type</th><th>Task</th><th>Assigned</th><th>Status</th><th></th></tr></thead>
-        <tbody>${tasks.length ? tasks.map(rowHtml).join('') : `<tr><td colspan="7">${emptyHtml('No tasks match this filter.')}</td></tr>`}</tbody>
+        <thead><tr><th style="width:30px;"></th><th>Created</th><th>Due Date</th><th>Task Type</th><th>Task</th><th>Assigned</th><th>Status</th><th></th></tr></thead>
+        <tbody>${tasks.length ? tasks.map(rowHtml).join('') : `<tr><td colspan="8">${emptyHtml('No tasks match this filter.')}</td></tr>`}</tbody>
       </table></div>
     </div>`;
   document.getElementById('btnAddTaskHere').addEventListener('click', ()=> openModal(null, {category: state.view.category, subCategory: state.view.subCategory, activity: state.view.activity}));
@@ -2007,8 +2195,10 @@ function taskDetailHtml(t){
     detailField('Status', t.status),
     detailField('Status Comment', t.statusComment),
     detailField('Created Date', fmtDate(t.createdDate)),
+    detailField('Due Date', fmtDate(t.date)),
     detailField('Revised Date', t.revisedDate),
     detailField('Completion Date', fmtDate(t.completionDate)),
+    detailField('Delay', isDelayed(t) ? (delayDays(t) + ' day' + (delayDays(t)===1?'':'s') + ' late') : ''),
     detailField('Hours Spent', t.hoursSpent),
     detailField('Links', t.links),
     detailField('N-Drive Path', t.nDrivePath),
@@ -2016,7 +2206,7 @@ function taskDetailHtml(t){
     detailField('Closure Notes', t.closureNotes),
     detailField('Cancellation Category', t.cancellationCategory)
   ].join('');
-  return `<div class="task-detail-grid">${fields}</div>${checklistSummaryHtml(t)}`;
+  return `<div class="task-detail-grid">${fields}</div>${checklistSummaryHtml(t)}${linkedActivitiesSummaryHtml(t)}`;
 }
 function checklistSummaryHtml(t){
   if(t.taskType !== 'Meeting/Event' || !Array.isArray(t.checklist) || !t.checklist.length) return '';
@@ -2029,15 +2219,25 @@ function checklistSummaryHtml(t){
     </div>`).join('');
   return `<div class="task-detail-checklist"><div class="task-detail-label" style="margin-bottom:8px;">Meeting Checklist</div>${items}</div>`;
 }
+function linkedActivitiesSummaryHtml(t){
+  if(!Array.isArray(t.linkedActivities) || !t.linkedActivities.length) return '';
+  const chips = t.linkedActivities.map(a=>`
+    <span class="linked-activity-chip" data-category="${escapeHtml(a.category)}" data-subcategory="${escapeHtml(a.subCategory)}" data-activity="${escapeHtml(a.activity)}">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5l6-6m0 0h-4.5m4.5 0v4.5M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5"/></svg>
+      ${escapeHtml(activityDisplayLabel(a))}
+    </span>`).join('');
+  return `<div class="task-detail-checklist"><div class="task-detail-label" style="margin-bottom:8px;">Linked Activities</div>${chips}</div>`;
+}
 function rowHtml(t){
   const isOpen = t.status !== 'Done' && t.status !== 'Cancelled';
   return `<tr class="task-row" data-id="${t.id}">
     <td class="expand-cell"><span class="icon-btn expand-btn" title="Show details"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></span></td>
+    <td>${fmtDate(t.createdDate)}</td>
     <td>${fmtDate(t.date)}</td>
     <td>${escapeHtml(t.taskType||'—')}</td>
     <td class="desc-cell">${escapeHtml(t.description)}${t.statusComment && t.status==='Cancelled' ? `<div style="color:#b91c1c; font-size:11px; margin-top:3px;">Reason: ${escapeHtml(t.statusComment)}</div>`:''}</td>
     <td>${escapeHtml(t.assignedPerson||'—')}</td>
-    <td>${badgeHtml(t.status)}</td>
+    <td>${taskBadgeHtml(t)}</td>
     <td class="actions-cell">
       ${isOpen ? `<span class="icon-btn close-btn" title="Record Completion / Closure"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></span>` : ''}
       <span class="icon-btn edit-btn" title="Edit"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.4-9.4a2 2 0 112.8 2.8L11 15l-4 1 1-4z"/></svg></span>
@@ -2045,7 +2245,7 @@ function rowHtml(t){
     </td>
   </tr>
   <tr class="task-detail-row" data-detail-for="${t.id}" style="display:none;">
-    <td colspan="7">${taskDetailHtml(t)}</td>
+    <td colspan="8">${taskDetailHtml(t)}</td>
   </tr>`;
 }
 function bindRowClicks(){
@@ -2065,6 +2265,12 @@ function bindRowClicks(){
       const isOpen = detailRow.style.display !== 'none';
       detailRow.style.display = isOpen ? 'none' : 'table-row';
       if(expandBtn) expandBtn.classList.toggle('expanded', !isOpen);
+    });
+  });
+  document.querySelectorAll('.linked-activity-chip').forEach(chip=>{
+    chip.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      switchView('category', { category: chip.dataset.category, subCategory: chip.dataset.subcategory, activity: chip.dataset.activity });
     });
   });
 }
@@ -2524,6 +2730,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
     modalChecklist.push({ id: uid('CL'), text:'', assignedPerson:'', deadline:'', done:false });
     renderChecklistItems();
   });
+  document.getElementById('btnAddLinkedActivity').addEventListener('click', ()=>{
+    modalLinkedActivities.push(null);
+    renderLinkedActivities();
+  });
 
   document.getElementById('closureModalClose').addEventListener('click', closeClosureModal);
   document.getElementById('btnCancelClosureModal').addEventListener('click', closeClosureModal);
@@ -2578,6 +2788,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('btnAddSubCat').addEventListener('click', addSubCat);
   document.getElementById('newSubCatInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') addSubCat(); });
   document.getElementById('subCatManageCategory').addEventListener('change', renderSubCatManage);
+  document.getElementById('activityManageCategory').addEventListener('change', renderActivityManage);
   document.getElementById('btnAddTeamMember').addEventListener('click', addTeamMember);
   document.getElementById('newTeamMemberInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') addTeamMember(); });
 
