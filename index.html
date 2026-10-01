@@ -284,6 +284,11 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
 .task-detail-field{min-width:0;}
 .task-detail-label{font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--text-faint); margin-bottom:3px;}
 .task-detail-value{font-size:12.5px; color:var(--text); font-weight:600; word-break:break-word; white-space:pre-wrap;}
+.task-detail-checklist{margin-top:16px; padding-top:14px; border-top:1px solid var(--border);}
+.task-detail-checklist-item{display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text); font-weight:600; padding:4px 0; flex-wrap:wrap;}
+.task-detail-checklist-check{font-size:14px; flex-shrink:0;}
+.task-detail-checklist-text.done{text-decoration:line-through; color:var(--text-faint);}
+.task-detail-checklist-meta{font-size:11px; font-weight:700; color:var(--text-dim); background:var(--panel); border:1px solid var(--border); border-radius:20px; padding:2px 9px;}
 
 /* ---------- TIMELINE / MONTH SCROLLER ---------- */
 .month-scroller{
@@ -450,6 +455,18 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
 .private-note-box label{display:flex; align-items:center; gap:6px; font-size:12px; font-weight:800; color:var(--violet); text-transform:uppercase; letter-spacing:.4px; margin-bottom:8px;}
 .private-note-box textarea{width:100%; background:var(--panel); border:1px solid var(--violet-pale-2); border-radius:9px; padding:10px 12px; font-size:13.5px; font-family:inherit; outline:none; min-height:64px; resize:vertical;}
 .private-note-box .pn-hint{font-size:10.5px; color:var(--text-faint); margin-top:6px; font-weight:600;}
+.checklist-box{background:var(--panel-2); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:16px;}
+.checklist-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+.checklist-head label{font-size:12px; font-weight:800; color:var(--text); text-transform:uppercase; letter-spacing:.4px;}
+.checklist-row{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
+.checklist-row .cl-done{width:17px; height:17px; flex-shrink:0; cursor:pointer;}
+.checklist-row .cl-text{flex:2; min-width:0; background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:13px; color:var(--text); outline:none;}
+.checklist-row .cl-assigned{flex:1; min-width:0; background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:12.5px; color:var(--text); outline:none;}
+.checklist-row .cl-deadline{flex:1; min-width:0; background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:12.5px; color:var(--text); outline:none;}
+.checklist-row .cl-text.done{text-decoration:line-through; color:var(--text-faint);}
+.checklist-row .cl-remove{width:26px; height:26px; flex-shrink:0;}
+.checklist-empty{font-size:12px; color:var(--text-faint); font-weight:600; display:none;}
+.checklist-empty.show{display:block;}
 
 /* ---------- FORMSTACK TABS ---------- */
 .fs-tabs{display:flex; gap:8px; margin-bottom:16px;}
@@ -744,6 +761,14 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
       <datalist id="activityList"></datalist>
       <div class="form-row"><label>Task Type</label><input type="text" id="f_taskType" list="taskTypeList" placeholder="e.g. Drafting"></div>
       <datalist id="taskTypeList"></datalist>
+      <div class="checklist-box" id="checklistBox" style="display:none;">
+        <div class="checklist-head">
+          <label>Meeting Checklist / To-Do Items</label>
+          <button type="button" class="btn btn-sm" id="btnAddChecklistItem">+ Add Item</button>
+        </div>
+        <div id="checklistItems"></div>
+        <div class="checklist-empty" id="checklistEmptyNote">No to-do items yet — add one above.</div>
+      </div>
       <div class="form-row"><label>Task (Description)</label><textarea id="f_description"></textarea></div>
       <div class="form-grid">
         <div class="form-row"><label>Status</label>
@@ -1082,19 +1107,22 @@ function taskToSheetRow(t){
     Links: t.links||'', Comments: t.comments||'', CreatedDate: t.createdDate||'',
     CompletionDate: t.completionDate||'', HoursSpent: t.hoursSpent||'', NDrivePath: t.nDrivePath||'',
     ClosureNotes: t.closureNotes||'', CancellationCategory: t.cancellationCategory||'',
-    PrivateNotes: JSON.stringify(t.privateNotes||{})
+    PrivateNotes: JSON.stringify(t.privateNotes||{}),
+    Checklist: JSON.stringify(t.checklist||[])
   };
 }
 function sheetRowToTask(r){
   let privateNotes = {};
   try{ privateNotes = r.PrivateNotes ? JSON.parse(r.PrivateNotes) : {}; }catch(e){}
+  let checklist = [];
+  try{ checklist = r.Checklist ? JSON.parse(r.Checklist) : []; }catch(e){}
   return {
     id: r.ID, category: tabNameToCategoryKey(r.Category)||'IWG', month: r.Month||'', date: r.Date||'', subCategory: r.SubCategory||'', activity: r.Activity||'',
     taskType: r.TaskType||'', description: r.Task||'', assignedPerson: r.AssignedPerson||'',
     status: r.Status||'Not Started', statusComment: r.StatusComment||'', revisedDate: r.RevisedDate||'',
     links: r.Links||'', comments: r.Comments||'', createdDate: r.CreatedDate||'',
     completionDate: r.CompletionDate||'', hoursSpent: r.HoursSpent||'', nDrivePath: r.NDrivePath||'',
-    closureNotes: r.ClosureNotes||'', cancellationCategory: r.CancellationCategory||'', privateNotes
+    closureNotes: r.ClosureNotes||'', cancellationCategory: r.CancellationCategory||'', privateNotes, checklist
   };
 }
 async function sheetsPost(payload){
@@ -1335,7 +1363,8 @@ async function saveTaskFromForm(){
     nDrivePath: existing ? existing.nDrivePath||'' : '',
     closureNotes: existing ? existing.closureNotes||'' : '',
     cancellationCategory: existing ? existing.cancellationCategory||'' : '',
-    privateNotes: existing ? {...(existing.privateNotes||{})} : {}
+    privateNotes: existing ? {...(existing.privateNotes||{})} : {},
+    checklist: modalChecklist.filter(it=>it.text.trim()!=='').map(it=>({...it, text: it.text.trim()}))
   };
   if(!task.description){ toast('Task description is required', 'error'); return; }
 
@@ -1399,6 +1428,36 @@ function populateCategorySelect(selectEl, selected){
   selectEl.innerHTML = state.categories.map(c=>`<option value="${escapeHtml(c.key)}">${escapeHtml(c.label)}</option>`).join('');
   selectEl.value = selected;
 }
+let modalChecklist = [];
+function updateChecklistVisibility(){
+  const isMeeting = document.getElementById('f_taskType').value.trim() === 'Meeting/Event';
+  document.getElementById('checklistBox').style.display = isMeeting ? '' : 'none';
+}
+function renderChecklistItems(){
+  const box = document.getElementById('checklistItems');
+  box.innerHTML = modalChecklist.map((item,idx)=>`
+    <div class="checklist-row" data-idx="${idx}">
+      <input type="checkbox" class="cl-done" ${item.done?'checked':''}>
+      <input type="text" class="cl-text ${item.done?'done':''}" placeholder="To-do item" value="${escapeHtml(item.text)}">
+      <select class="cl-assigned"></select>
+      <input type="date" class="cl-deadline" value="${item.deadline||''}">
+      <span class="icon-btn danger cl-remove" title="Remove"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg></span>
+    </div>`).join('');
+  document.getElementById('checklistEmptyNote').classList.toggle('show', modalChecklist.length===0);
+  box.querySelectorAll('.checklist-row').forEach(row=>{
+    const idx = parseInt(row.dataset.idx, 10);
+    const item = modalChecklist[idx];
+    populateAssigneeSelect(row.querySelector('.cl-assigned'), item.assignedPerson);
+    row.querySelector('.cl-done').addEventListener('change', (e)=>{
+      item.done = e.target.checked;
+      row.querySelector('.cl-text').classList.toggle('done', item.done);
+    });
+    row.querySelector('.cl-text').addEventListener('input', (e)=>{ item.text = e.target.value; });
+    row.querySelector('.cl-assigned').addEventListener('change', (e)=>{ item.assignedPerson = e.target.value; });
+    row.querySelector('.cl-deadline').addEventListener('change', (e)=>{ item.deadline = e.target.value; });
+    row.querySelector('.cl-remove').addEventListener('click', ()=>{ modalChecklist.splice(idx,1); renderChecklistItems(); });
+  });
+}
 function openModal(task, prefill){
   document.getElementById('modalTitle').textContent = task ? 'Edit Task' : 'Add Task';
   document.getElementById('btnDeleteTask').style.display = task ? 'inline-flex' : 'none';
@@ -1412,6 +1471,9 @@ function openModal(task, prefill){
   f('f_subCategory', task ? task.subCategory : (prefill&&prefill.subCategory) || '');
   f('f_activity', task ? task.activity : (prefill&&prefill.activity) || '');
   f('f_taskType', task ? task.taskType : 'Administrative');
+  modalChecklist = task && Array.isArray(task.checklist) ? JSON.parse(JSON.stringify(task.checklist)) : [];
+  renderChecklistItems();
+  updateChecklistVisibility();
   f('f_description', task ? task.description : '');
   populateAssigneeSelect(document.getElementById('f_assignedPerson'), task ? task.assignedPerson : '');
   f('f_status', task ? task.status : 'Upcoming');
@@ -1954,7 +2016,18 @@ function taskDetailHtml(t){
     detailField('Closure Notes', t.closureNotes),
     detailField('Cancellation Category', t.cancellationCategory)
   ].join('');
-  return `<div class="task-detail-grid">${fields}</div>`;
+  return `<div class="task-detail-grid">${fields}</div>${checklistSummaryHtml(t)}`;
+}
+function checklistSummaryHtml(t){
+  if(t.taskType !== 'Meeting/Event' || !Array.isArray(t.checklist) || !t.checklist.length) return '';
+  const items = t.checklist.map(it=>`
+    <div class="task-detail-checklist-item">
+      <span class="task-detail-checklist-check">${it.done ? '☑' : '☐'}</span>
+      <span class="task-detail-checklist-text ${it.done?'done':''}">${escapeHtml(it.text)}</span>
+      ${it.assignedPerson ? `<span class="task-detail-checklist-meta">${escapeHtml(it.assignedPerson)}</span>` : ''}
+      ${it.deadline ? `<span class="task-detail-checklist-meta">Due ${fmtDate(it.deadline)}</span>` : ''}
+    </div>`).join('');
+  return `<div class="task-detail-checklist"><div class="task-detail-label" style="margin-bottom:8px;">Meeting Checklist</div>${items}</div>`;
 }
 function rowHtml(t){
   const isOpen = t.status !== 'Done' && t.status !== 'Cancelled';
@@ -2446,6 +2519,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('btnSaveTask').addEventListener('click', saveTaskFromForm);
   document.getElementById('taskModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='taskModalOverlay') closeModal(); });
   document.getElementById('f_category').addEventListener('change', (e)=> refreshModalDatalists(e.target.value));
+  document.getElementById('f_taskType').addEventListener('input', updateChecklistVisibility);
+  document.getElementById('btnAddChecklistItem').addEventListener('click', ()=>{
+    modalChecklist.push({ id: uid('CL'), text:'', assignedPerson:'', deadline:'', done:false });
+    renderChecklistItems();
+  });
 
   document.getElementById('closureModalClose').addEventListener('click', closeClosureModal);
   document.getElementById('btnCancelClosureModal').addEventListener('click', closeClosureModal);
