@@ -988,6 +988,25 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
   </div>
 </div>
 
+<!-- RENAME MODAL (generic: activities, task types, etc.) -->
+<div class="modal-overlay" id="renameModalOverlay">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-head">
+      <h3 id="renameModalTitle">Rename</h3>
+      <div class="modal-close" id="renameModalClose">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="form-row"><label id="renameModalLabel">New name</label><input type="text" id="renameModalInput"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="btnCancelRenameModal">Cancel</button>
+      <button class="btn btn-primary" id="btnConfirmRenameModal">Rename</button>
+    </div>
+  </div>
+</div>
+
 <!-- FILENAME MODAL -->
 <div class="modal-overlay" id="filenameModalOverlay">
   <div class="modal" style="max-width:420px;">
@@ -1349,22 +1368,20 @@ function renderTaskTypeManage(){
   });
 }
 function renameTaskType(oldName){
-  const newName = prompt('Rename task type "'+oldName+'" to:', oldName);
-  if(newName===null) return;
-  const trimmed = newName.trim();
-  if(!trimmed){ toast('Task type name cannot be empty', 'error'); return; }
-  if(trimmed === oldName) return;
-  if(state.taskTypes.some(t=>t.toLowerCase()===trimmed.toLowerCase() && t!==oldName)){
-    toast('That task type already exists', 'error'); return;
-  }
-  const affected = state.tasks.filter(t=>t.taskType===oldName);
-  state.taskTypes = state.taskTypes.map(t=> t===oldName ? trimmed : t);
-  affected.forEach(t=> t.taskType = trimmed);
-  persistLocal();
-  renderTaskTypeManage();
-  renderAll();
-  toast('Renamed to "'+trimmed+'" — updated '+affected.length+' task(s)');
-  syncTasksToSheet(affected);
+  openRenameModal('Rename Task Type', oldName, (trimmed)=>{
+    if(trimmed === oldName) return;
+    if(state.taskTypes.some(t=>t.toLowerCase()===trimmed.toLowerCase() && t!==oldName)){
+      toast('That task type already exists', 'error'); return;
+    }
+    const affected = state.tasks.filter(t=>t.taskType===oldName);
+    state.taskTypes = state.taskTypes.map(t=> t===oldName ? trimmed : t);
+    affected.forEach(t=> t.taskType = trimmed);
+    persistLocal();
+    renderTaskTypeManage();
+    renderAll();
+    toast('Renamed to "'+trimmed+'" — updated '+affected.length+' task(s)');
+    syncTasksToSheet(affected);
+  });
 }
 function addTaskType(){
   const input = document.getElementById('newTaskTypeInput');
@@ -1461,11 +1478,34 @@ function renderSubCatManage(){
     return `<div class="manage-row" data-sc="${escapeHtml(sc)}">
       <div class="mr-label">${escapeHtml(sc)}</div>
       <div class="mr-count">${count} task${count===1?'':'s'}</div>
+      <span class="icon-btn sc-edit-btn" title="Rename sub-category"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.4-9.4a2 2 0 112.8 2.8L11 15l-4 1 1-4z"/></svg></span>
       <span class="icon-btn danger sc-del-btn" title="${count>0?'Still in use':'Delete sub-category'}"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg></span>
     </div>`;
   }).join('') : emptyHtml('No sub-categories yet for this workstream.');
+  document.querySelectorAll('.sc-edit-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=> renameSubCat(catKey, btn.closest('.manage-row').dataset.sc));
+  });
   document.querySelectorAll('.sc-del-btn').forEach(btn=>{
     btn.addEventListener('click', ()=> deleteSubCat(catKey, btn.closest('.manage-row').dataset.sc));
+  });
+}
+function renameSubCat(catKey, oldName){
+  openRenameModal('Rename Sub-Category', oldName, (trimmed)=>{
+    if(trimmed === oldName) return;
+    if((state.subCategories[catKey]||[]).some(s=>s.toLowerCase()===trimmed.toLowerCase() && s!==oldName)){
+      toast('That sub-category already exists', 'error'); return;
+    }
+    const affected = state.tasks.filter(t=>t.category===catKey && t.subCategory===oldName);
+    state.subCategories[catKey] = (state.subCategories[catKey]||[]).map(s=> s===oldName ? trimmed : s);
+    affected.forEach(t=> t.subCategory = trimmed);
+    if(state.view.category===catKey && state.view.subCategory===oldName){
+      state.view.subCategory = trimmed;
+    }
+    persistLocal();
+    renderSubCatManage();
+    renderAll();
+    toast('Renamed to "'+trimmed+'" — updated '+affected.length+' task(s)');
+    syncTasksToSheet(affected);
   });
 }
 function addSubCat(){
@@ -1490,34 +1530,32 @@ function deleteSubCat(catKey, name){
 }
 
 function renameActivity(catKey, subCategory, oldActivity){
-  const newName = prompt('Rename activity "'+oldActivity+'" to:', oldActivity);
-  if(newName===null) return;
-  const trimmed = newName.trim();
-  if(!trimmed){ toast('Activity name cannot be empty', 'error'); return; }
-  if(trimmed === oldActivity) return;
-  const touched = [];
-  state.tasks.forEach(t=>{
-    let changed = false;
-    if(t.category===catKey && t.subCategory===subCategory && t.activity===oldActivity){
-      t.activity = trimmed; changed = true;
+  openRenameModal('Rename Activity', oldActivity, (trimmed)=>{
+    if(trimmed === oldActivity) return;
+    const touched = [];
+    state.tasks.forEach(t=>{
+      let changed = false;
+      if(t.category===catKey && t.subCategory===subCategory && t.activity===oldActivity){
+        t.activity = trimmed; changed = true;
+      }
+      if(Array.isArray(t.linkedActivities)){
+        t.linkedActivities.forEach(la=>{
+          if(la.category===catKey && la.subCategory===subCategory && la.activity===oldActivity){
+            la.activity = trimmed; changed = true;
+          }
+        });
+      }
+      if(changed) touched.push(t);
+    });
+    if(!touched.length){ toast('No tasks found for that activity', 'error'); return; }
+    if(state.view.category===catKey && state.view.subCategory===subCategory && state.view.activity===oldActivity){
+      state.view.activity = trimmed;
     }
-    if(Array.isArray(t.linkedActivities)){
-      t.linkedActivities.forEach(la=>{
-        if(la.category===catKey && la.subCategory===subCategory && la.activity===oldActivity){
-          la.activity = trimmed; changed = true;
-        }
-      });
-    }
-    if(changed) touched.push(t);
+    persistLocal();
+    renderAll();
+    toast('Renamed to "'+trimmed+'" — updated '+touched.length+' task(s)');
+    syncTasksToSheet(touched);
   });
-  if(!touched.length){ toast('No tasks found for that activity', 'error'); return; }
-  if(state.view.category===catKey && state.view.subCategory===subCategory && state.view.activity===oldActivity){
-    state.view.activity = trimmed;
-  }
-  persistLocal();
-  renderAll();
-  toast('Renamed to "'+trimmed+'" — updated '+touched.length+' task(s)');
-  syncTasksToSheet(touched);
 }
 
 function renderCalDefaultTypesManage(){
@@ -2304,6 +2342,28 @@ function openDayDetailModal(y, m, day, tasks){
 }
 function closeDayDetailModal(){ document.getElementById('dayDetailModalOverlay').classList.remove('open'); }
 
+let renameModalOnConfirm = null;
+function openRenameModal(title, currentValue, onConfirm){
+  document.getElementById('renameModalTitle').textContent = title;
+  document.getElementById('renameModalLabel').textContent = 'Rename "'+currentValue+'" to';
+  const input = document.getElementById('renameModalInput');
+  input.value = currentValue;
+  renameModalOnConfirm = onConfirm;
+  document.getElementById('renameModalOverlay').classList.add('open');
+  setTimeout(()=>{ input.focus(); input.select(); }, 30);
+}
+function closeRenameModal(){
+  document.getElementById('renameModalOverlay').classList.remove('open');
+  renameModalOnConfirm = null;
+}
+function confirmRenameModal(){
+  const trimmed = document.getElementById('renameModalInput').value.trim();
+  if(!trimmed){ toast('Name cannot be empty', 'error'); return; }
+  const cb = renameModalOnConfirm;
+  closeRenameModal();
+  if(cb) cb(trimmed);
+}
+
 /* ---------------- CATEGORY DRILL-DOWN ---------------- */
 function renderCategoryView(){
   renderCategoryNav();
@@ -3030,6 +3090,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('btnSaveForm').addEventListener('click', saveFormFromForm);
   document.getElementById('dayDetailModalClose').addEventListener('click', closeDayDetailModal);
   document.getElementById('dayDetailModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='dayDetailModalOverlay') closeDayDetailModal(); });
+  document.getElementById('renameModalClose').addEventListener('click', closeRenameModal);
+  document.getElementById('btnCancelRenameModal').addEventListener('click', closeRenameModal);
+  document.getElementById('btnConfirmRenameModal').addEventListener('click', confirmRenameModal);
+  document.getElementById('renameModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='renameModalOverlay') closeRenameModal(); });
+  document.getElementById('renameModalInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') confirmRenameModal(); });
   document.querySelectorAll('.fs-tabs .chip').forEach(chip=>{
     chip.addEventListener('click', ()=>{
       state.formstackTab = chip.dataset.fstab;
