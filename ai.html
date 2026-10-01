@@ -274,6 +274,16 @@ td.actions-cell{white-space:nowrap; text-align:right;}
 .icon-btn:hover{background:var(--violet-pale); border-color:var(--violet-pale-2); transform:translateY(-1px);}
 .icon-btn svg{width:14px; height:14px;}
 .icon-btn.danger:hover{background:rgba(185,28,28,0.08); border-color:rgba(185,28,28,0.25); color:#b91c1c;}
+tr.task-row{cursor:pointer;}
+td.expand-cell{width:30px; padding-right:0;}
+.expand-btn{width:22px; height:22px; margin-left:0;}
+.expand-btn svg{transition:transform .15s ease;}
+.expand-btn.expanded svg{transform:rotate(90deg);}
+tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:none;}
+.task-detail-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:14px;}
+.task-detail-field{min-width:0;}
+.task-detail-label{font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--text-faint); margin-bottom:3px;}
+.task-detail-value{font-size:12.5px; color:var(--text); font-weight:600; word-break:break-word; white-space:pre-wrap;}
 
 /* ---------- TIMELINE / MONTH SCROLLER ---------- */
 .month-scroller{
@@ -1913,17 +1923,43 @@ function renderCategoryView(){
         </div>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th>Date</th><th>Task Type</th><th>Task</th><th>Assigned</th><th>Status</th><th></th></tr></thead>
-        <tbody>${tasks.length ? tasks.map(rowHtml).join('') : `<tr><td colspan="6">${emptyHtml('No tasks match this filter.')}</td></tr>`}</tbody>
+        <thead><tr><th style="width:30px;"></th><th>Date</th><th>Task Type</th><th>Task</th><th>Assigned</th><th>Status</th><th></th></tr></thead>
+        <tbody>${tasks.length ? tasks.map(rowHtml).join('') : `<tr><td colspan="7">${emptyHtml('No tasks match this filter.')}</td></tr>`}</tbody>
       </table></div>
     </div>`;
   document.getElementById('btnAddTaskHere').addEventListener('click', ()=> openModal(null, {category: state.view.category, subCategory: state.view.subCategory, activity: state.view.activity}));
   document.getElementById('btnSaveExcelScoped').addEventListener('click', ()=> saveExcelScoped(tasks, state.view.category));
   bindRowClicks();
 }
+function detailField(label, value){
+  if(value===undefined || value===null || value==='') return '';
+  return `<div class="task-detail-field"><div class="task-detail-label">${escapeHtml(label)}</div><div class="task-detail-value">${escapeHtml(String(value))}</div></div>`;
+}
+function taskDetailHtml(t){
+  const fields = [
+    detailField('Category', t.category),
+    detailField('Sub-Category', t.subCategory),
+    detailField('Activity', t.activity),
+    detailField('Task Type', t.taskType),
+    detailField('Assigned Person', t.assignedPerson),
+    detailField('Status', t.status),
+    detailField('Status Comment', t.statusComment),
+    detailField('Created Date', fmtDate(t.createdDate)),
+    detailField('Revised Date', t.revisedDate),
+    detailField('Completion Date', fmtDate(t.completionDate)),
+    detailField('Hours Spent', t.hoursSpent),
+    detailField('Links', t.links),
+    detailField('N-Drive Path', t.nDrivePath),
+    detailField('Comments', t.comments),
+    detailField('Closure Notes', t.closureNotes),
+    detailField('Cancellation Category', t.cancellationCategory)
+  ].join('');
+  return `<div class="task-detail-grid">${fields}</div>`;
+}
 function rowHtml(t){
   const isOpen = t.status !== 'Done' && t.status !== 'Cancelled';
-  return `<tr data-id="${t.id}">
+  return `<tr class="task-row" data-id="${t.id}">
+    <td class="expand-cell"><span class="icon-btn expand-btn" title="Show details"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></span></td>
     <td>${fmtDate(t.date)}</td>
     <td>${escapeHtml(t.taskType||'—')}</td>
     <td class="desc-cell">${escapeHtml(t.description)}${t.statusComment && t.status==='Cancelled' ? `<div style="color:#b91c1c; font-size:11px; margin-top:3px;">Reason: ${escapeHtml(t.statusComment)}</div>`:''}</td>
@@ -1934,18 +1970,29 @@ function rowHtml(t){
       <span class="icon-btn edit-btn" title="Edit"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.4-9.4a2 2 0 112.8 2.8L11 15l-4 1 1-4z"/></svg></span>
       <span class="icon-btn danger del-btn" title="Delete"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.9 12.1A2 2 0 0116.1 21H7.9a2 2 0 01-2-1.9L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16"/></svg></span>
     </td>
+  </tr>
+  <tr class="task-detail-row" data-detail-for="${t.id}" style="display:none;">
+    <td colspan="7">${taskDetailHtml(t)}</td>
   </tr>`;
 }
 function bindRowClicks(){
-  document.querySelectorAll('tr[data-id]').forEach(tr=>{
+  document.querySelectorAll('tr.task-row[data-id]').forEach(tr=>{
     const id = tr.dataset.id;
     const t = state.tasks.find(x=>x.id===id);
     const editBtn = tr.querySelector('.edit-btn');
     const delBtn = tr.querySelector('.del-btn');
     const closeBtn = tr.querySelector('.close-btn');
+    const expandBtn = tr.querySelector('.expand-btn');
     if(editBtn) editBtn.addEventListener('click', (e)=>{ e.stopPropagation(); openModal(t); });
     if(delBtn) delBtn.addEventListener('click', (e)=>{ e.stopPropagation(); deleteTask(id); });
     if(closeBtn) closeBtn.addEventListener('click', (e)=>{ e.stopPropagation(); openClosureModal(id); });
+    tr.addEventListener('click', ()=>{
+      const detailRow = document.querySelector(`tr.task-detail-row[data-detail-for="${id}"]`);
+      if(!detailRow) return;
+      const isOpen = detailRow.style.display !== 'none';
+      detailRow.style.display = isOpen ? 'none' : 'table-row';
+      if(expandBtn) expandBtn.classList.toggle('expanded', !isOpen);
+    });
   });
 }
 
@@ -1964,7 +2011,7 @@ function renderCancelled(){
   if(!cancelled.length){ body.innerHTML = emptyHtml('No cancelled items — nothing has been marked cancelled yet.'); return; }
   body.innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th>Category</th><th>Date</th><th>Sub Category</th><th>Activity</th><th>Task</th><th>Cancellation Category</th><th>Reason</th><th></th></tr></thead>
-    <tbody>${cancelled.map(t=>`<tr data-id="${t.id}">
+    <tbody>${cancelled.map(t=>`<tr class="task-row" data-id="${t.id}">
       <td>${catBadgeHtml(t.category)}</td>
       <td>${fmtDate(t.date)}</td><td>${escapeHtml(t.subCategory)}</td><td>${escapeHtml(t.activity)}</td>
       <td class="desc-cell">${escapeHtml(t.description)}</td>
