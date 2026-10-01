@@ -231,7 +231,12 @@ a, button, .btn, .nav-item, .chip, .icon-btn, .entity-card, .kpi-card, .ring-car
 .badge-cat{font-size:10px; font-weight:700; padding:3px 9px; border-radius:20px;}
 
 /* ---------- BREADCRUMB ---------- */
-.crumbs{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-dim); margin-bottom:18px; flex-wrap:wrap;}
+.crumbs{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-dim); flex-wrap:wrap;}
+.cat-top-row{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px;}
+.reorder-row{display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:var(--panel-2); border-radius:10px; margin-bottom:8px;}
+.reorder-row span:first-child{font-size:13.5px; font-weight:600; color:var(--text);}
+.reorder-arrows{display:flex; gap:6px; flex-shrink:0;}
+.reorder-arrows .icon-btn{width:26px; height:26px;}
 .crumbs span{cursor:pointer;}
 .crumbs span:hover{color:var(--violet);}
 .crumbs .sep{color:var(--text-faint); cursor:default;}
@@ -292,6 +297,9 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
 .task-detail-checklist-check{font-size:14px; flex-shrink:0;}
 .task-detail-checklist-text.done{text-decoration:line-through; color:var(--text-faint);}
 .task-detail-checklist-meta{font-size:11px; font-weight:700; color:var(--text-dim); background:var(--panel); border:1px solid var(--border); border-radius:20px; padding:2px 9px;}
+.task-detail-quick-status{margin-top:16px; padding-top:14px; border-top:1px solid var(--border);}
+.quick-status-row{display:flex; gap:10px; align-items:center;}
+.quick-status-row select{background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:13px; color:var(--text); outline:none; font-family:inherit;}
 
 /* ---------- TIMELINE / MONTH SCROLLER ---------- */
 .month-scroller{
@@ -549,6 +557,7 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
 
 /* ---------- FORMSTACK TABS ---------- */
 .fs-tabs{display:flex; gap:8px; margin-bottom:16px;}
+.fs-status-select{border:1px solid transparent; border-radius:20px; padding:5px 10px; font-size:11.5px; font-weight:700; outline:none; cursor:pointer; font-family:inherit;}
 </style>
 </head>
 <body>
@@ -737,7 +746,10 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
 
       <!-- CATEGORY: SUBCATEGORY BROWSER -->
       <div class="view" id="view-category">
-        <div class="crumbs" id="catCrumbs"></div>
+        <div class="cat-top-row">
+          <div class="crumbs" id="catCrumbs"></div>
+          <span class="icon-btn" id="btnReorderCards" title="Reorder" style="display:none;"><svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/></svg></span>
+        </div>
         <div class="chip-row" id="catStatusFilter"></div>
         <div id="catBody"></div>
       </div>
@@ -794,7 +806,7 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Form</th><th>Received</th><th>Date</th><th>Deadline / Status</th><th>N Drive Path</th><th></th></tr></thead>
+              <thead><tr><th>Description</th><th>Received</th><th>Due Date</th><th>Status</th><th>N Drive Path</th><th></th></tr></thead>
               <tbody id="formstackBody"></tbody>
             </table>
           </div>
@@ -1007,14 +1019,16 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
       <div class="form-row"><label>Form Name</label><input type="text" id="ff_description" placeholder="e.g. IWG Prize"></div>
       <div class="form-grid">
         <div class="form-row"><label>Received</label><input type="text" id="ff_received" placeholder="e.g. 12"></div>
-        <div class="form-row"><label>Date</label><input type="date" id="ff_date"></div>
+        <div class="form-row"><label>Due Date</label><input type="date" id="ff_date"></div>
       </div>
-      <div class="form-row"><label>Deadline / Status Text</label><input type="text" id="ff_deadline" placeholder="e.g. Open until 30 Sept"></div>
+      <div class="form-row"><label>Deadline / Status Notes</label><input type="text" id="ff_deadline" placeholder="e.g. Open until 30 Sept"></div>
       <div class="form-row"><label>N Drive File Path</label><input type="text" id="ff_ndrive" placeholder="e.g. N:\TGEO\Forms\..."></div>
       <div class="form-row"><label>Status</label>
-        <select id="ff_closed">
-          <option value="false">Live</option>
-          <option value="true">Closed</option>
+        <select id="ff_formStatus">
+          <option value="Upcoming">Upcoming</option>
+          <option value="Live">Live</option>
+          <option value="Extended">Extended</option>
+          <option value="Closed">Closed</option>
         </select>
       </div>
     </div>
@@ -1041,6 +1055,25 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
     <div class="modal-foot">
       <button class="btn" id="btnCancelRenameModal">Cancel</button>
       <button class="btn btn-primary" id="btnConfirmRenameModal">Rename</button>
+    </div>
+  </div>
+</div>
+
+<!-- REORDER MODAL (sub-categories / activities) -->
+<div class="modal-overlay" id="reorderModalOverlay">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-head">
+      <h3 id="reorderModalTitle">Reorder</h3>
+      <div class="modal-close" id="reorderModalClose">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div id="reorderModalList"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="btnCancelReorderModal">Cancel</button>
+      <button class="btn btn-primary" id="btnApplyReorderModal">Apply</button>
     </div>
   </div>
 </div>
@@ -1179,7 +1212,9 @@ let state = {
   assignablePeople: [],
   todoCategory: null,
   calendarDefaultTypes: ['Meeting/Event'],
-  calendarVisibleTypes: null
+  calendarVisibleTypes: null,
+  subCategoryOrder: {},
+  activityOrder: {}
 };
 
 function uid(prefix){ return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
@@ -1212,6 +1247,8 @@ function loadState(){
       state.assignablePeople = saved.assignablePeople && saved.assignablePeople.length ? saved.assignablePeople : DEFAULT_TEAM_MEMBERS.slice();
       state.calendarDefaultTypes = saved.calendarDefaultTypes && saved.calendarDefaultTypes.length ? saved.calendarDefaultTypes : ['Meeting/Event'];
       state.calendarVisibleTypes = saved.calendarVisibleTypes && saved.calendarVisibleTypes.length ? saved.calendarVisibleTypes : state.calendarDefaultTypes.slice();
+      state.subCategoryOrder = saved.subCategoryOrder || {};
+      state.activityOrder = saved.activityOrder || {};
     } else {
       state.tasks = JSON.parse(JSON.stringify(EMBEDDED_DATA.tasks));
       state.formstack = JSON.parse(JSON.stringify(EMBEDDED_DATA.formstack||[]));
@@ -1235,7 +1272,8 @@ function loadState(){
 function persistLocal(){
   const payload = JSON.stringify({tasks: state.tasks, formstack: state.formstack, todos: state.todos, notes: state.notes,
     sheetsUrl: state.sheetsUrl, categories: state.categories, taskTypes: state.taskTypes, subCategories: state.subCategories,
-    assignablePeople: state.assignablePeople, calendarDefaultTypes: state.calendarDefaultTypes, calendarVisibleTypes: state.calendarVisibleTypes});
+    assignablePeople: state.assignablePeople, calendarDefaultTypes: state.calendarDefaultTypes, calendarVisibleTypes: state.calendarVisibleTypes,
+    subCategoryOrder: state.subCategoryOrder, activityOrder: state.activityOrder});
   localStorage.setItem(LS_KEY, encryptText(payload, SHARED_DB_KEY));
 }
 
@@ -1537,6 +1575,9 @@ function renameSubCat(catKey, oldName){
     const affected = state.tasks.filter(t=>t.category===catKey && t.subCategory===oldName);
     state.subCategories[catKey] = (state.subCategories[catKey]||[]).map(s=> s===oldName ? trimmed : s);
     affected.forEach(t=> t.subCategory = trimmed);
+    if(state.subCategoryOrder[catKey]){
+      state.subCategoryOrder[catKey] = state.subCategoryOrder[catKey].map(s=> s===oldName ? trimmed : s);
+    }
     if(state.view.category===catKey && state.view.subCategory===oldName){
       state.view.subCategory = trimmed;
     }
@@ -1587,6 +1628,10 @@ function renameActivity(catKey, subCategory, oldActivity){
       if(changed) touched.push(t);
     });
     if(!touched.length){ toast('No tasks found for that activity', 'error'); return; }
+    const actOrderKey = catKey + ACTIVITY_KEY_SEP + subCategory;
+    if(state.activityOrder[actOrderKey]){
+      state.activityOrder[actOrderKey] = state.activityOrder[actOrderKey].map(a=> a===oldActivity ? trimmed : a);
+    }
     if(state.view.category===catKey && state.view.subCategory===subCategory && state.view.activity===oldActivity){
       state.view.activity = trimmed;
     }
@@ -2177,6 +2222,7 @@ function renderOverview(){
 
 /* ---------------- LIVE FORMS ---------------- */
 function isFormLive(f){
+  if(f.formStatus) return f.formStatus !== 'Closed';
   if(f.closed === true) return false;
   if(f.closed === false) return true;
   const raw = f.deadline;
@@ -2187,6 +2233,61 @@ function isFormLive(f){
     if(!isNaN(dt)) return dt >= new Date(new Date().toDateString());
   }
   return true;
+}
+const FORM_STATUS_COLORS = {
+  Upcoming: {bg:'var(--badge-upcoming-bg)', fg:'var(--badge-upcoming-text)'},
+  Live: {bg:'var(--badge-done-bg)', fg:'var(--badge-done-text)'},
+  Extended: {bg:'var(--badge-progress-bg)', fg:'var(--badge-progress-text)'},
+  Closed: {bg:'var(--badge-notstarted-bg)', fg:'var(--badge-notstarted-text)'}
+};
+function guessDueDate(text){
+  if(!text) return null;
+  const isoMatch = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if(isoMatch) return isoMatch[0];
+  const slashMatch = text.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
+  if(slashMatch){
+    const [, mm, dd, yyyy] = slashMatch;
+    return `${yyyy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`;
+  }
+  const monthNames = {january:0,jan:0,february:1,feb:1,march:2,mar:2,april:3,apr:3,may:4,june:5,jun:5,july:6,jul:6,
+    august:7,aug:7,september:8,sept:8,sep:8,october:9,oct:9,november:10,nov:10,december:11,dec:11};
+  function resolveYear(monthIdx, explicitYear){
+    if(explicitYear) return parseInt(explicitYear, 10);
+    const today = new Date();
+    let year = today.getFullYear();
+    let dt = new Date(year, monthIdx, 1);
+    const cutoff = new Date(today.getFullYear(), today.getMonth()-2, today.getDate());
+    if(dt < cutoff) year += 1;
+    return year;
+  }
+  function toIsoLocal(year, monthIdx, day){
+    const dt = new Date(year, monthIdx, day);
+    if(isNaN(dt) || dt.getMonth()!==monthIdx) return null;
+    return `${year}-${String(monthIdx+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  }
+  let m = text.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)\b(?:,?\s+(\d{4}))?/);
+  if(m && monthNames.hasOwnProperty(m[2].toLowerCase())){
+    const day = parseInt(m[1], 10);
+    const monthIdx = monthNames[m[2].toLowerCase()];
+    const year = resolveYear(monthIdx, m[3]);
+    const iso = toIsoLocal(year, monthIdx, day);
+    if(iso) return iso;
+  }
+  m = text.match(/\b([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s+(\d{4}))?/);
+  if(m && monthNames.hasOwnProperty(m[1].toLowerCase())){
+    const monthIdx = monthNames[m[1].toLowerCase()];
+    const day = parseInt(m[2], 10);
+    const year = resolveYear(monthIdx, m[3]);
+    const iso = toIsoLocal(year, monthIdx, day);
+    if(iso) return iso;
+  }
+  return null;
+}
+function syncFormsToSheet(forms){
+  if(!sheetsConnected() || !forms.length) return;
+  forms.forEach(f=>{
+    sheetsPost({action:'update', id:f.id, category: FORMS_TAB, data: formToSheetRow(f)}).catch(()=>{});
+  });
 }
 function renderLiveForms(){
   const live = state.formstack.filter(isFormLive);
@@ -2498,6 +2599,60 @@ function confirmRenameModal(){
   if(cb) cb(trimmed);
 }
 
+function applyCustomOrder(items, order){
+  if(!order || !order.length) return items.slice().sort();
+  const known = order.filter(name=> items.includes(name));
+  const rest = items.filter(name=> !order.includes(name)).sort();
+  return [...known, ...rest];
+}
+
+let reorderModalItems = [];
+let reorderModalOnApply = null;
+function openReorderModal(title, items, onApply){
+  document.getElementById('reorderModalTitle').textContent = title;
+  reorderModalItems = items.slice();
+  reorderModalOnApply = onApply;
+  renderReorderModalList();
+  document.getElementById('reorderModalOverlay').classList.add('open');
+}
+function renderReorderModalList(){
+  const box = document.getElementById('reorderModalList');
+  box.innerHTML = reorderModalItems.map((name,idx)=>`
+    <div class="reorder-row">
+      <span>${escapeHtml(name)}</span>
+      <div class="reorder-arrows">
+        <span class="icon-btn reorder-up-btn" data-idx="${idx}" title="Move up" style="${idx===0?'opacity:.35; pointer-events:none;':''}"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg></span>
+        <span class="icon-btn reorder-down-btn" data-idx="${idx}" title="Move down" style="${idx===reorderModalItems.length-1?'opacity:.35; pointer-events:none;':''}"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg></span>
+      </div>
+    </div>`).join('');
+  box.querySelectorAll('.reorder-up-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const idx = parseInt(btn.dataset.idx, 10);
+      if(idx<=0) return;
+      [reorderModalItems[idx-1], reorderModalItems[idx]] = [reorderModalItems[idx], reorderModalItems[idx-1]];
+      renderReorderModalList();
+    });
+  });
+  box.querySelectorAll('.reorder-down-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const idx = parseInt(btn.dataset.idx, 10);
+      if(idx>=reorderModalItems.length-1) return;
+      [reorderModalItems[idx+1], reorderModalItems[idx]] = [reorderModalItems[idx], reorderModalItems[idx+1]];
+      renderReorderModalList();
+    });
+  });
+}
+function closeReorderModal(){
+  document.getElementById('reorderModalOverlay').classList.remove('open');
+  reorderModalOnApply = null;
+}
+function applyReorderModal(){
+  const cb = reorderModalOnApply;
+  const items = reorderModalItems.slice();
+  closeReorderModal();
+  if(cb) cb(items);
+}
+
 /* ---------------- CATEGORY DRILL-DOWN ---------------- */
 function renderCategoryView(){
   renderCategoryNav();
@@ -2506,6 +2661,8 @@ function renderCategoryView(){
   const crumbs = document.getElementById('catCrumbs');
   const body = document.getElementById('catBody');
   const filterRow = document.getElementById('catStatusFilter');
+  const reorderBtn = document.getElementById('btnReorderCards');
+  reorderBtn.style.display = 'none';
 
   let crumbHtml = `<span data-crumb="root">${escapeHtml(state.view.category)}</span>`;
   if(state.view.subCategory) crumbHtml += `<span class="sep">/</span><span data-crumb="sub">${escapeHtml(state.view.subCategory)}</span>`;
@@ -2517,8 +2674,17 @@ function renderCategoryView(){
 
   if(!state.view.subCategory){
     filterRow.innerHTML = '';
-    const subs = Object.keys(hier).sort();
+    const subs = applyCustomOrder(Object.keys(hier), state.subCategoryOrder[state.view.category]);
     if(!subs.length){ body.innerHTML = emptyHtml('No tasks recorded yet for this workstream.'); return; }
+    if(subs.length>1){
+      reorderBtn.style.display = '';
+      reorderBtn.onclick = ()=> openReorderModal('Reorder Sub-Categories', subs, (newOrder)=>{
+        state.subCategoryOrder[state.view.category] = newOrder;
+        persistLocal();
+        renderCategoryView();
+        toast('Sub-category order updated');
+      });
+    }
     body.innerHTML = `<div class="card-grid">` + subs.map(sc=>{
       const allTasks = Object.values(hier[sc]).flat();
       const nActs = Object.keys(hier[sc]).length;
@@ -2540,7 +2706,17 @@ function renderCategoryView(){
   if(!state.view.activity){
     filterRow.innerHTML = '';
     const acts = hier[state.view.subCategory] || {};
-    const actNames = Object.keys(acts);
+    const actOrderKey = state.view.category + ACTIVITY_KEY_SEP + state.view.subCategory;
+    const actNames = applyCustomOrder(Object.keys(acts), state.activityOrder[actOrderKey]);
+    if(actNames.length>1){
+      reorderBtn.style.display = '';
+      reorderBtn.onclick = ()=> openReorderModal('Reorder Activities', actNames, (newOrder)=>{
+        state.activityOrder[actOrderKey] = newOrder;
+        persistLocal();
+        renderCategoryView();
+        toast('Activity order updated');
+      });
+    }
     body.innerHTML = `<div class="card-grid">` + actNames.map(ac=>{
       const tasks = acts[ac];
       const stage = activityStage(tasks);
@@ -2622,7 +2798,19 @@ function taskDetailHtml(t){
     detailField('Closure Notes', t.closureNotes),
     detailField('Cancellation Category', t.cancellationCategory)
   ].join('');
-  return `<div class="task-detail-grid">${fields}</div>${checklistSummaryHtml(t)}${linkedActivitiesSummaryHtml(t)}`;
+  return `<div class="task-detail-grid">${fields}</div>${checklistSummaryHtml(t)}${linkedActivitiesSummaryHtml(t)}${quickStatusHtml(t)}`;
+}
+function quickStatusHtml(t){
+  const statuses = ['Upcoming','Pending','In progress','Not Started','To check','Done','Cancelled'];
+  return `<div class="task-detail-quick-status">
+    <div class="task-detail-label" style="margin-bottom:8px;">Quick Status Change</div>
+    <div class="quick-status-row">
+      <select class="quick-status-select" data-id="${t.id}">
+        ${statuses.map(s=>`<option value="${escapeHtml(s)}" ${t.status===s?'selected':''}>${escapeHtml(s)}</option>`).join('')}
+      </select>
+      <button class="btn btn-sm btn-primary quick-status-save-btn" data-id="${t.id}">Save Status</button>
+    </div>
+  </div>`;
 }
 function checklistSummaryHtml(t){
   if(t.taskType !== 'Meeting/Event' || !Array.isArray(t.checklist) || !t.checklist.length) return '';
@@ -2687,6 +2875,25 @@ function bindRowClicks(){
     chip.addEventListener('click', (e)=>{
       e.stopPropagation();
       switchView('category', { category: chip.dataset.category, subCategory: chip.dataset.subcategory, activity: chip.dataset.activity });
+    });
+  });
+  document.querySelectorAll('.quick-status-save-btn').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const task = state.tasks.find(x=>x.id===id);
+      if(!task) return;
+      const sel = btn.closest('.quick-status-row').querySelector('.quick-status-select');
+      const newStatus = sel.value;
+      if(newStatus === task.status){ toast('Status unchanged'); return; }
+      task.status = newStatus;
+      if((newStatus==='Done' || newStatus==='Cancelled') && !task.completionDate){
+        task.completionDate = new Date().toISOString().slice(0,10);
+      }
+      persistLocal();
+      renderAll();
+      toast('Status updated to "'+newStatus+'"');
+      syncTasksToSheet([task]);
     });
   });
 }
@@ -2771,23 +2978,64 @@ function renderNotes(){
 
 /* ---------------- FORMSTACK ---------------- */
 function renderFormstack(){
+  const backfilled = [];
+  state.formstack.forEach(f=>{
+    if(!f.date){
+      const guess = guessDueDate(f.deadline);
+      if(guess){ f.date = guess; backfilled.push(f); }
+    }
+    if(!f.formStatus){
+      f.formStatus = isFormLive(f) ? 'Live' : 'Closed';
+      if(!backfilled.includes(f)) backfilled.push(f);
+    }
+  });
+  if(backfilled.length){
+    persistLocal();
+    syncFormsToSheet(backfilled);
+  }
+
   const wantLive = state.formstackTab !== 'closed';
   const rows = state.formstack.filter(f=> isFormLive(f) === wantLive);
   const body = document.getElementById('formstackBody');
   if(!rows.length){ body.innerHTML = `<tr><td colspan="6">${emptyHtml(wantLive?'No live forms right now.':'No closed forms yet.')}</td></tr>`; return; }
-  body.innerHTML = rows.map(f=>`
+  body.innerHTML = rows.map(f=>{
+    const statusColor = FORM_STATUS_COLORS[f.formStatus] || FORM_STATUS_COLORS.Upcoming;
+    return `
     <tr data-fid="${f.id}">
-      <td class="desc-cell">${escapeHtml(f.description)}</td>
+      <td class="desc-cell">${escapeHtml(f.description)}${f.deadline ? `<div style="color:var(--text-faint); font-size:11px; margin-top:3px;">${escapeHtml(f.deadline)}</div>` : ''}</td>
       <td>${escapeHtml(String(f.received))}</td>
       <td>${f.date ? fmtDate(f.date) : '—'}</td>
-      <td>${escapeHtml(String(f.deadline||''))} ${isFormLive(f) ? '<span class="badge badge-done" style="margin-left:6px;">Live</span>' : '<span class="badge badge-notstarted" style="margin-left:6px;">Closed</span>'}</td>
+      <td><select class="fs-status-select" data-fid="${f.id}" style="background:${statusColor.bg}; color:${statusColor.fg};">
+        <option value="Upcoming" ${f.formStatus==='Upcoming'?'selected':''}>Upcoming</option>
+        <option value="Live" ${f.formStatus==='Live'?'selected':''}>Live</option>
+        <option value="Extended" ${f.formStatus==='Extended'?'selected':''}>Extended</option>
+        <option value="Closed" ${f.formStatus==='Closed'?'selected':''}>Closed</option>
+      </select></td>
       <td>${escapeHtml(f.nDrivePath||'—')}</td>
       <td class="actions-cell"><span class="icon-btn form-edit-btn" title="Edit"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.4-9.4a2 2 0 112.8 2.8L11 15l-4 1 1-4z"/></svg></span></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
   body.querySelectorAll('.form-edit-btn').forEach(btn=>{
     btn.addEventListener('click', (e)=>{
       const id = e.target.closest('tr').dataset.fid;
       openFormModal(state.formstack.find(f=>f.id===id));
+    });
+  });
+  body.querySelectorAll('.fs-status-select').forEach(sel=>{
+    sel.addEventListener('change', (e)=>{
+      const f = state.formstack.find(x=>x.id===e.target.dataset.fid);
+      if(!f) return;
+      f.formStatus = e.target.value;
+      f.closed = f.formStatus === 'Closed';
+      persistLocal();
+      renderFormstack();
+      renderLiveForms();
+      toast('Status set to "'+f.formStatus+'"');
+      if(sheetsConnected()){
+        sheetsPost({action:'update', id:f.id, category: FORMS_TAB, data: formToSheetRow(f)}).catch(()=>{
+          toast('Saved locally, but sync to Google Sheet failed', 'error');
+        });
+      }
     });
   });
 }
@@ -2802,7 +3050,7 @@ function openFormModal(form){
   document.getElementById('ff_date').value = form ? (form.date||'') : '';
   document.getElementById('ff_deadline').value = form ? form.deadline : '';
   document.getElementById('ff_ndrive').value = form ? (form.nDrivePath||'') : '';
-  document.getElementById('ff_closed').value = form ? String(isFormLive(form)===false) : 'false';
+  document.getElementById('ff_formStatus').value = form ? (form.formStatus || (isFormLive(form) ? 'Live' : 'Closed')) : 'Upcoming';
   document.getElementById('btnDeleteForm').onclick = ()=> form && deleteForm(form.id);
   document.getElementById('formModalOverlay').classList.add('open');
 }
@@ -2810,11 +3058,12 @@ function closeFormModal(){ document.getElementById('formModalOverlay').classList
 
 const FORMS_TAB = 'FORMSTACK';
 function formToSheetRow(f){
-  return { Description: f.description||'', Received: f.received||'', Date: f.date||'', Deadline: f.deadline||'', NDrivePath: f.nDrivePath||'', Closed: f.closed===true ? 'true' : (f.closed===false ? 'false' : '') };
+  return { Description: f.description||'', Received: f.received||'', Date: f.date||'', Deadline: f.deadline||'', NDrivePath: f.nDrivePath||'',
+    Closed: f.closed===true ? 'true' : (f.closed===false ? 'false' : ''), FormStatus: f.formStatus||'' };
 }
 function sheetRowToForm(r){
   return { id: r.ID, description: r.Description||'', received: r.Received||'', date: r.Date||'', deadline: r.Deadline||'', nDrivePath: r.NDrivePath||'',
-    closed: r.Closed==='true' ? true : (r.Closed==='false' ? false : undefined) };
+    closed: r.Closed==='true' ? true : (r.Closed==='false' ? false : undefined), formStatus: r.FormStatus||'' };
 }
 
 async function saveFormFromForm(){
@@ -2822,6 +3071,7 @@ async function saveFormFromForm(){
   const existingForm = id ? state.formstack.find(f=>f.id===id) : null;
   const description = document.getElementById('ff_description').value.trim();
   if(!description){ toast('Form name is required', 'error'); return; }
+  const formStatus = document.getElementById('ff_formStatus').value;
   const form = {
     id: id || uid('F'),
     description,
@@ -2829,7 +3079,8 @@ async function saveFormFromForm(){
     date: document.getElementById('ff_date').value || (existingForm ? existingForm.date||'' : ''),
     deadline: document.getElementById('ff_deadline').value.trim(),
     nDrivePath: document.getElementById('ff_ndrive').value.trim(),
-    closed: document.getElementById('ff_closed').value === 'true'
+    formStatus,
+    closed: formStatus === 'Closed'
   };
   const isEdit = !!id;
   if(isEdit){
@@ -3237,6 +3488,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('btnConfirmRenameModal').addEventListener('click', confirmRenameModal);
   document.getElementById('renameModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='renameModalOverlay') closeRenameModal(); });
   document.getElementById('renameModalInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') confirmRenameModal(); });
+  document.getElementById('reorderModalClose').addEventListener('click', closeReorderModal);
+  document.getElementById('btnCancelReorderModal').addEventListener('click', closeReorderModal);
+  document.getElementById('btnApplyReorderModal').addEventListener('click', applyReorderModal);
+  document.getElementById('reorderModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='reorderModalOverlay') closeReorderModal(); });
   document.querySelectorAll('.fs-tabs .chip').forEach(chip=>{
     chip.addEventListener('click', ()=>{
       state.formstackTab = chip.dataset.fstab;
