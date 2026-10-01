@@ -333,6 +333,26 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
 .timeline-mode-row{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:14px;}
 .cal-filters-col{display:flex; flex-direction:column; gap:10px; margin-bottom:20px; padding:14px 16px; background:var(--panel); border:1px solid var(--border); border-radius:12px;}
 .cal-filter-group{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+.dropdown-check{position:relative;}
+.dropdown-check-btn{
+  background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:8px 12px;
+  font-size:12.5px; font-weight:700; color:var(--text); cursor:pointer; display:flex; align-items:center; gap:6px;
+  font-family:inherit;
+}
+.dropdown-check-btn:hover{border-color:var(--violet-pale-2);}
+.dropdown-check-btn::after{content:''; width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; border-top:5px solid var(--text-dim); margin-left:2px;}
+.dropdown-check-panel{
+  display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:50; min-width:220px; max-height:280px;
+  overflow-y:auto; background:var(--panel); border:1px solid var(--border); border-radius:12px;
+  box-shadow:var(--shadow-lg); padding:8px;
+}
+.dropdown-check-panel.open{display:block;}
+.dropdown-check-row{display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:8px; font-size:12.5px; font-weight:600; color:var(--text); cursor:pointer;}
+.dropdown-check-row:hover{background:var(--panel-2);}
+.dropdown-check-row input{cursor:pointer;}
+.dropdown-check-divider{height:1px; background:var(--border); margin:6px 0;}
+.dropdown-check-action{font-size:11.5px; font-weight:700; color:var(--violet); cursor:pointer; padding:7px 8px; border-radius:8px;}
+.dropdown-check-action:hover{background:var(--violet-pale);}
 .cal-type-filter-label{font-size:11.5px; font-weight:700; color:var(--text-dim); flex-shrink:0; width:84px;}
 .cal-split{display:flex; gap:24px; align-items:flex-start;}
 .cal-left{flex:1 1 0; min-width:0;}
@@ -345,6 +365,22 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
 .cal-legend{display:flex; gap:12px; flex-wrap:wrap;}
 .cal-legend-item{display:flex; align-items:center; gap:5px; font-size:10.5px; font-weight:700; color:var(--text-dim);}
 .cal-legend-dot{width:9px; height:9px; border-radius:50%; flex-shrink:0;}
+#calDayList .tl-item{padding:9px 11px; gap:9px;}
+#calDayList .tl-date{width:36px;}
+#calDayList .tl-date .d{font-size:13.5px;}
+#calDayList .tl-date .m{font-size:8.5px;}
+#calDayList .tl-body .t{font-size:11.5px;}
+#calDayList .tl-body .s{font-size:10px;}
+#calDayList .badge{font-size:9.5px; padding:3px 8px;}
+.cal-pagination{display:flex; align-items:center; justify-content:center; gap:14px; margin-top:12px; padding-top:12px; border-top:1px solid var(--border);}
+.cal-pagination .icon-btn{width:26px; height:26px;}
+.cal-pagination #calPagInfo{font-size:11px; font-weight:700; color:var(--text-dim);}
+.cal-holiday-banner{
+  display:flex; align-items:center; gap:8px; background:var(--rose-pale); color:#c81e3a; font-size:11.5px; font-weight:700;
+  border-radius:10px; padding:9px 12px; margin-bottom:12px;
+}
+.cal-split.year-mode .cal-right{display:none;}
+.cal-split.year-mode .cal-left{flex:1 1 100%;}
 @media (max-width: 960px){
   .cal-split{flex-direction:column;}
   .cal-right{max-height:none; position:static;}
@@ -364,11 +400,15 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
 .cal-cell.outside:hover{transform:none; box-shadow:none;}
 .cal-cell.today{border-color:var(--violet);}
 .cal-cell.selected{background:var(--violet-pale); border-color:var(--violet); box-shadow:0 0 0 1px var(--violet) inset;}
-.cal-cell-daynum{font-size:14px; font-weight:800; color:var(--text-dim);}
+.cal-cell.holiday{background:rgba(244,63,94,0.10); border-color:rgba(244,63,94,0.3);}
+.cal-cell-daynum{font-size:14px; font-weight:800; color:var(--text-dim); display:flex; align-items:center; gap:4px;}
 .cal-cell.today .cal-cell-daynum{color:var(--violet);}
+.cal-cell-holiday-dot{width:6px; height:6px; border-radius:50%; background:#f43f5e; display:inline-block;}
 .cal-cell-dots{display:flex; gap:4px; flex-wrap:wrap; margin-top:6px;}
 .cal-dot{width:7px; height:7px; border-radius:50%; flex-shrink:0;}
 .cal-dot-more{font-size:8.5px; font-weight:800; color:var(--text-faint);}
+.cal-cell-tasklist{display:flex; flex-direction:column; gap:2px; margin-top:5px; overflow:hidden;}
+.cal-cell-task-line{display:flex; align-items:center; gap:4px; font-size:9px; font-weight:700; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .cal-cell-count{
   position:absolute; bottom:8px; right:10px; font-size:10px; font-weight:800; color:var(--text-faint);
 }
@@ -376,6 +416,7 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
   .cal-grid{grid-template-columns:repeat(7,minmax(30px,1fr)); grid-auto-rows:56px; gap:4px;}
   .cal-cell{padding:4px;}
   .cal-cell-daynum{font-size:11px;}
+  .cal-cell-tasklist{display:none;}
   .cal-cell-count{font-size:9px; bottom:3px; right:4px;}
   .cal-type-filter-label{width:auto;}
 }
@@ -704,11 +745,17 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
         <div class="cal-filters-col" id="calFiltersCol" style="display:none;">
           <div class="cal-filter-group">
             <span class="cal-type-filter-label">Task types:</span>
-            <div class="chip-row" id="calTypeFilter" style="margin:0;"></div>
+            <div class="dropdown-check" id="calTypeDropdown">
+              <button type="button" class="dropdown-check-btn" id="calTypeDropdownBtn">Task Types</button>
+              <div class="dropdown-check-panel" id="calTypeDropdownPanel"></div>
+            </div>
           </div>
           <div class="cal-filter-group">
             <span class="cal-type-filter-label">Assigned to:</span>
-            <div class="chip-row" id="calAssigneeFilter" style="margin:0;"></div>
+            <div class="dropdown-check" id="calAssigneeDropdown">
+              <button type="button" class="dropdown-check-btn" id="calAssigneeDropdownBtn">All People</button>
+              <div class="dropdown-check-panel" id="calAssigneeDropdownPanel"></div>
+            </div>
           </div>
         </div>
         <div id="timelineListMode">
@@ -719,8 +766,8 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
           </div>
         </div>
         <div id="timelineCalendarMode" style="display:none;">
-          <div class="cal-split">
-            <div class="cal-left">
+          <div class="cal-split" id="calSplitWrap">
+            <div class="cal-left" id="calLeftPanel">
               <div class="cal-nav-row">
                 <button class="icon-btn" id="calPrevMonth"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg></button>
                 <h2 id="calMonthTitle">Month Year</h2>
@@ -733,12 +780,18 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
               <div class="cal-grid" id="calGrid"></div>
               <div class="cal-year-grid" id="calYearGrid" style="display:none;"></div>
             </div>
-            <div class="cal-right">
+            <div class="cal-right" id="calRightPanel">
               <div class="cal-right-head">
-                <h2 id="calDayListTitle">Today</h2>
+                <h2 id="calDayListTitle">This Month</h2>
                 <div class="cal-legend" id="calLegend"></div>
               </div>
+              <div id="calHolidayBanner" class="cal-holiday-banner" style="display:none;"></div>
               <div class="timeline-list" id="calDayList"></div>
+              <div class="cal-pagination" id="calPagination" style="display:none;">
+                <span class="icon-btn" id="calPagPrevBtn"><svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg></span>
+                <span id="calPagInfo">Page 1 of 1</span>
+                <span class="icon-btn" id="calPagNextBtn"><svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></span>
+              </div>
             </div>
           </div>
         </div>
@@ -855,6 +908,16 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
         <div class="panel">
           <div class="panel-head"><div><h2>Calendar Defaults</h2><div class="desc">Task types shown by default on the Timeline's Calendar view — "Reset to default" there uses this selection</div></div></div>
           <div class="chip-row" id="calDefaultTypesManage" style="margin-bottom:0;"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><div><h2>Public Holidays</h2><div class="desc">Marked on the Calendar view — shown as a highlighted day with the holiday name</div></div></div>
+          <div id="holidayManageList" style="margin-bottom:16px;"></div>
+          <div style="display:flex; gap:10px;">
+            <input type="date" id="newHolidayDate" style="background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; color:var(--text); font-size:13.5px; outline:none;">
+            <input type="text" id="newHolidayName" placeholder="Holiday name, e.g. Christmas Day" style="flex:1; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; color:var(--text); font-size:13.5px; outline:none;">
+            <button class="btn btn-primary" id="btnAddHoliday">Add Holiday</button>
+          </div>
         </div>
       </div>
 
@@ -1203,7 +1266,7 @@ let state = {
   searchTerm: '',
   view: { category: 'IWG', subCategory: null, activity: null, month: null, statusFilter: null,
     timelineMode: 'list', calViewMode: 'month', calYear: new Date().getFullYear(), calMonthIndex: new Date().getMonth(),
-    calAssigneeFilter: [], calSelectedDate: new Date().toISOString().slice(0,10) },
+    calAssigneeFilter: [], calSelectedDate: new Date().toISOString().slice(0,10), calRightMode: 'month', calRightPage: 0 },
   formstackTab: 'live',
   expandedCat: 'IWG',
   categories: [],
@@ -1214,8 +1277,14 @@ let state = {
   calendarDefaultTypes: ['Meeting/Event'],
   calendarVisibleTypes: null,
   subCategoryOrder: {},
-  activityOrder: {}
+  activityOrder: {},
+  holidays: null
 };
+const DEFAULT_HOLIDAYS = [
+  { date:'2026-09-10', name:'WTO Holiday' },
+  { date:'2026-09-11', name:'WTO Holiday' },
+  { date:'2026-12-25', name:'Christmas Day' }
+];
 
 function uid(prefix){ return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 
@@ -1249,6 +1318,7 @@ function loadState(){
       state.calendarVisibleTypes = saved.calendarVisibleTypes && saved.calendarVisibleTypes.length ? saved.calendarVisibleTypes : state.calendarDefaultTypes.slice();
       state.subCategoryOrder = saved.subCategoryOrder || {};
       state.activityOrder = saved.activityOrder || {};
+      state.holidays = Array.isArray(saved.holidays) ? saved.holidays : DEFAULT_HOLIDAYS.slice();
     } else {
       state.tasks = JSON.parse(JSON.stringify(EMBEDDED_DATA.tasks));
       state.formstack = JSON.parse(JSON.stringify(EMBEDDED_DATA.formstack||[]));
@@ -1268,12 +1338,13 @@ function loadState(){
   if(!state.todoCategory) state.todoCategory = state.categories[0].key;
   if(!state.calendarDefaultTypes || !state.calendarDefaultTypes.length) state.calendarDefaultTypes = ['Meeting/Event'];
   if(!state.calendarVisibleTypes || !state.calendarVisibleTypes.length) state.calendarVisibleTypes = state.calendarDefaultTypes.slice();
+  if(!Array.isArray(state.holidays)) state.holidays = DEFAULT_HOLIDAYS.slice();
 }
 function persistLocal(){
   const payload = JSON.stringify({tasks: state.tasks, formstack: state.formstack, todos: state.todos, notes: state.notes,
     sheetsUrl: state.sheetsUrl, categories: state.categories, taskTypes: state.taskTypes, subCategories: state.subCategories,
     assignablePeople: state.assignablePeople, calendarDefaultTypes: state.calendarDefaultTypes, calendarVisibleTypes: state.calendarVisibleTypes,
-    subCategoryOrder: state.subCategoryOrder, activityOrder: state.activityOrder});
+    subCategoryOrder: state.subCategoryOrder, activityOrder: state.activityOrder, holidays: state.holidays});
   localStorage.setItem(LS_KEY, encryptText(payload, SHARED_DB_KEY));
 }
 
@@ -1663,6 +1734,46 @@ function renderCalDefaultTypesManage(){
   });
 }
 
+function renderHolidayManage(){
+  const sorted = state.holidays.slice().sort((a,b)=> a.date.localeCompare(b.date));
+  document.getElementById('holidayManageList').innerHTML = sorted.length ? sorted.map(h=>{
+    const dt = new Date(h.date+'T00:00:00');
+    const label = isNaN(dt) ? h.date : dt.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+    return `
+    <div class="manage-row" data-date="${escapeHtml(h.date)}">
+      <div class="mr-label">${escapeHtml(label)}</div>
+      <div class="mr-count">${escapeHtml(h.name)}</div>
+      <span class="icon-btn danger holiday-del-btn" title="Remove holiday"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg></span>
+    </div>`;
+  }).join('') : emptyHtml('No holidays added yet.');
+  document.querySelectorAll('.holiday-del-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=> deleteHoliday(btn.closest('.manage-row').dataset.date));
+  });
+}
+function addHoliday(){
+  const dateInput = document.getElementById('newHolidayDate');
+  const nameInput = document.getElementById('newHolidayName');
+  const date = dateInput.value;
+  const name = nameInput.value.trim();
+  if(!date){ toast('Pick a date first', 'error'); return; }
+  if(!name){ toast('Enter a holiday name', 'error'); return; }
+  if(state.holidays.some(h=>h.date===date)){ toast('A holiday is already set for that date', 'error'); return; }
+  state.holidays.push({date, name});
+  persistLocal();
+  dateInput.value = '';
+  nameInput.value = '';
+  renderHolidayManage();
+  renderCalendarView();
+  toast('Holiday added');
+}
+function deleteHoliday(date){
+  state.holidays = state.holidays.filter(h=>h.date!==date);
+  persistLocal();
+  renderHolidayManage();
+  renderCalendarView();
+  toast('Holiday removed');
+}
+
 function updateConnPill(){
   const pill = document.getElementById('connPill');
   const label = document.getElementById('connLabel');
@@ -2046,6 +2157,7 @@ function switchView(view, opts){
     renderSubCatManage();
     renderTeamMemberManage();
     renderCalDefaultTypesManage();
+    renderHolidayManage();
   }
 }
 
@@ -2362,18 +2474,25 @@ function renderTimelineList(){
   document.getElementById('timelineList').innerHTML = items.length ? items.map(t=>tlItemHtml(t)).join('') : emptyHtml('No tasks in this month.');
   bindTlItemClicks('timelineList');
 }
+function closeAllDropdownChecks(){
+  document.querySelectorAll('.dropdown-check-panel').forEach(p=> p.classList.remove('open'));
+}
 function renderCalendarTypeFilter(){
-  const box = document.getElementById('calTypeFilter');
-  box.innerHTML = state.taskTypes.map(tt=>`
-    <div class="chip ${state.calendarVisibleTypes.includes(tt)?'active':''}" data-type="${escapeHtml(tt)}" style="${state.calendarVisibleTypes.includes(tt)?`background:${taskTypeColor(tt)}22; color:${taskTypeColor(tt)}; border-color:${taskTypeColor(tt)}55;`:''}">${escapeHtml(tt)}</div>
-  `).join('') + `<div class="chip" id="calResetDefaultBtn" style="color:var(--text-faint);">Reset to default</div>`;
-  box.querySelectorAll('.chip[data-type]').forEach(chip=>{
-    chip.addEventListener('click', ()=>{
-      const tt = chip.dataset.type;
-      if(state.calendarVisibleTypes.includes(tt)){
-        state.calendarVisibleTypes = state.calendarVisibleTypes.filter(x=>x!==tt);
+  const btn = document.getElementById('calTypeDropdownBtn');
+  const n = state.calendarVisibleTypes.length;
+  const total = state.taskTypes.length;
+  btn.textContent = n===total ? 'All Task Types' : n===0 ? 'No Task Types' : n+' Task Type'+(n===1?'':'s');
+  const panel = document.getElementById('calTypeDropdownPanel');
+  panel.innerHTML = state.taskTypes.map(tt=>`
+    <label class="dropdown-check-row"><input type="checkbox" data-type="${escapeHtml(tt)}" ${state.calendarVisibleTypes.includes(tt)?'checked':''}> ${escapeHtml(tt)}</label>
+  `).join('') + `<div class="dropdown-check-divider"></div><div class="dropdown-check-action" id="calResetDefaultBtn">Reset to default</div>`;
+  panel.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const tt = cb.dataset.type;
+      if(cb.checked){
+        if(!state.calendarVisibleTypes.includes(tt)) state.calendarVisibleTypes.push(tt);
       } else {
-        state.calendarVisibleTypes.push(tt);
+        state.calendarVisibleTypes = state.calendarVisibleTypes.filter(x=>x!==tt);
       }
       persistLocal();
       renderCalendarTypeFilter();
@@ -2388,22 +2507,26 @@ function renderCalendarTypeFilter(){
   });
 }
 function renderCalendarAssigneeFilter(){
-  const box = document.getElementById('calAssigneeFilter');
-  const allActive = state.view.calAssigneeFilter.length === 0;
-  box.innerHTML = `<div class="chip ${allActive?'active':''}" id="calAssigneeAllChip">All People</div>` +
-    state.assignablePeople.map(name=>`<div class="chip ${state.view.calAssigneeFilter.includes(name)?'active':''}" data-name="${escapeHtml(name)}">${escapeHtml(name)}</div>`).join('');
-  document.getElementById('calAssigneeAllChip').addEventListener('click', ()=>{
+  const btn = document.getElementById('calAssigneeDropdownBtn');
+  const n = state.view.calAssigneeFilter.length;
+  btn.textContent = n===0 ? 'All People' : n+' Selected';
+  const panel = document.getElementById('calAssigneeDropdownPanel');
+  panel.innerHTML = `<div class="dropdown-check-action" id="calAssigneeAllBtn">All People</div><div class="dropdown-check-divider"></div>` +
+    state.assignablePeople.map(name=>`
+    <label class="dropdown-check-row"><input type="checkbox" data-name="${escapeHtml(name)}" ${state.view.calAssigneeFilter.includes(name)?'checked':''}> ${escapeHtml(name)}</label>
+  `).join('');
+  document.getElementById('calAssigneeAllBtn').addEventListener('click', ()=>{
     state.view.calAssigneeFilter = [];
     renderCalendarAssigneeFilter();
     renderCalendarView();
   });
-  box.querySelectorAll('.chip[data-name]').forEach(chip=>{
-    chip.addEventListener('click', ()=>{
-      const name = chip.dataset.name;
-      if(state.view.calAssigneeFilter.includes(name)){
-        state.view.calAssigneeFilter = state.view.calAssigneeFilter.filter(x=>x!==name);
+  panel.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const name = cb.dataset.name;
+      if(cb.checked){
+        if(!state.view.calAssigneeFilter.includes(name)) state.view.calAssigneeFilter.push(name);
       } else {
-        state.view.calAssigneeFilter.push(name);
+        state.view.calAssigneeFilter = state.view.calAssigneeFilter.filter(x=>x!==name);
       }
       renderCalendarAssigneeFilter();
       renderCalendarView();
@@ -2411,9 +2534,11 @@ function renderCalendarAssigneeFilter(){
   });
 }
 function renderCalendarLegend(){
-  document.getElementById('calLegend').innerHTML = state.categories.map(c=>`
+  const catItems = state.categories.map(c=>`
     <div class="cal-legend-item"><span class="cal-legend-dot" style="background:${c.fg};"></span>${escapeHtml(c.label)}</div>
   `).join('');
+  const holidayItem = state.holidays.length ? `<div class="cal-legend-item"><span class="cal-legend-dot" style="background:${HOLIDAY_COLOR};"></span>Holiday</div>` : '';
+  document.getElementById('calLegend').innerHTML = catItems + holidayItem;
 }
 function calendarTaskMatches(t){
   return t.date && state.calendarVisibleTypes.includes(t.taskType) &&
@@ -2435,16 +2560,29 @@ function multiColorBackground(colors, alpha){
   const stops = colors.map((c,i)=> `${c}${alpha} ${(i*seg).toFixed(2)}%, ${c}${alpha} ${((i+1)*seg).toFixed(2)}%`).join(', ');
   return `linear-gradient(90deg, ${stops})`;
 }
+function truncateWords(text, n){
+  const words = (text||'').trim().split(/\s+/).filter(Boolean);
+  if(words.length<=n) return words.join(' ');
+  return words.slice(0,n).join(' ') + '…';
+}
+const HOLIDAY_COLOR = '#f43f5e';
+function getHoliday(dateStr){
+  return state.holidays.find(h=>h.date===dateStr) || null;
+}
 function changeCalendarMonth(delta){
   let m = state.view.calMonthIndex + delta;
   let y = state.view.calYear;
   if(m<0){ m=11; y--; } else if(m>11){ m=0; y++; }
   state.view.calMonthIndex = m;
   state.view.calYear = y;
+  state.view.calRightMode = 'month';
+  state.view.calRightPage = 0;
   renderCalendarView();
 }
 function changeCalendarYear(delta){
   state.view.calYear += delta;
+  state.view.calRightMode = 'month';
+  state.view.calRightPage = 0;
   renderCalendarView();
 }
 function renderCalendarView(){
@@ -2453,20 +2591,27 @@ function renderCalendarView(){
   });
   document.getElementById('calGrid').style.display = state.view.calViewMode==='month' ? '' : 'none';
   document.getElementById('calYearGrid').style.display = state.view.calViewMode==='year' ? '' : 'none';
+  document.getElementById('calSplitWrap').classList.toggle('year-mode', state.view.calViewMode==='year');
   if(state.view.calViewMode==='year'){
     document.getElementById('calMonthTitle').textContent = String(state.view.calYear);
     renderCalendarYearGrid();
   } else {
     renderCalendarGrid();
   }
-  renderCalendarDayList();
+  renderCalendarRightPanel();
 }
 function getTasksForDate(dateStr){
   return state.tasks.filter(t=> t.date===dateStr && calendarTaskMatches(t));
 }
 function selectCalendarDate(dateStr){
-  state.view.calSelectedDate = dateStr;
-  if(state.view.calViewMode==='year'){
+  const cameFromYearView = state.view.calViewMode === 'year';
+  if(!cameFromYearView && state.view.calRightMode==='day' && state.view.calSelectedDate===dateStr){
+    state.view.calRightMode = 'month';
+  } else {
+    state.view.calSelectedDate = dateStr;
+    state.view.calRightMode = 'day';
+  }
+  if(cameFromYearView){
     const d = new Date(dateStr+'T00:00:00');
     state.view.calYear = d.getFullYear();
     state.view.calMonthIndex = d.getMonth();
@@ -2498,6 +2643,7 @@ function renderCalendarGrid(){
     cells.push({day:d, outside:false, dateStr,
       isToday: today.getFullYear()===y && today.getMonth()===m && today.getDate()===d,
       isSelected: state.view.calSelectedDate===dateStr,
+      holiday: getHoliday(dateStr),
       tasks: tasksByDay[d]||[]});
   }
   let trailing = 0;
@@ -2506,15 +2652,26 @@ function renderCalendarGrid(){
   const cellsHtml = cells.map(c=>{
     if(c.outside) return `<div class="cal-cell outside"><div class="cal-cell-daynum">${c.day}</div></div>`;
     const tasks = c.tasks||[];
-    const colors = dayCategoryColors(tasks);
-    const bg = multiColorBackground(colors, '20');
-    const maxDots = 4;
-    const dotsHtml = colors.slice(0,maxDots).map(c2=>`<span class="cal-dot" style="background:${c2};"></span>`).join('') +
-      (colors.length>maxDots ? `<span class="cal-dot-more">+${colors.length-maxDots}</span>` : '');
-    return `<div class="cal-cell ${c.isToday?'today':''} ${c.isSelected?'selected':''}" data-date="${c.dateStr}" style="${bg?`background:${bg};`:''}">
-      <div class="cal-cell-daynum">${c.day}</div>
-      <div class="cal-cell-dots">${dotsHtml}</div>
-      ${tasks.length>0 ? `<div class="cal-cell-count">${tasks.length}</div>` : ''}
+    let innerHtml;
+    if(tasks.length>0 && tasks.length<=3){
+      innerHtml = `<div class="cal-cell-tasklist">${tasks.map(t=>{
+        const color = catMeta(t.category).fg;
+        return `<div class="cal-cell-task-line"><span class="cal-dot" style="background:${color};"></span>${escapeHtml(truncateWords(t.description,4))}</div>`;
+      }).join('')}</div>`;
+    } else if(tasks.length>3){
+      const colors = dayCategoryColors(tasks);
+      const maxDots = 4;
+      const dotsHtml = colors.slice(0,maxDots).map(c2=>`<span class="cal-dot" style="background:${c2};"></span>`).join('') +
+        (colors.length>maxDots ? `<span class="cal-dot-more">+${colors.length-maxDots}</span>` : '');
+      innerHtml = `<div class="cal-cell-dots">${dotsHtml}</div><div class="cal-cell-count">${tasks.length}</div>`;
+    } else {
+      innerHtml = '';
+    }
+    const bg = tasks.length ? multiColorBackground(dayCategoryColors(tasks), '20') : '';
+    const holidayCls = c.holiday ? 'holiday' : '';
+    return `<div class="cal-cell ${c.isToday?'today':''} ${c.isSelected?'selected':''} ${holidayCls}" data-date="${c.dateStr}" style="${bg && !c.holiday ?`background:${bg};`:''}" title="${c.holiday?escapeHtml(c.holiday.name):''}">
+      <div class="cal-cell-daynum">${c.day}${c.holiday?' <span class="cal-cell-holiday-dot"></span>':''}</div>
+      ${innerHtml}
     </div>`;
   }).join('');
   document.getElementById('calGrid').innerHTML = dow.map(d=>`<div class="cal-dow">${d}</div>`).join('') + cellsHtml;
@@ -2541,11 +2698,11 @@ function renderCalendarYearGrid(){
     for(let d=1; d<=daysInMonth; d++){
       const dateStr = `${y}-${String(mi+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
       const tasks = tasksByDate[dateStr]||[];
-      const colors = dayCategoryColors(tasks);
-      const bg = multiColorBackground(colors, '33');
+      const holiday = getHoliday(dateStr);
+      const bg = holiday ? (HOLIDAY_COLOR+'33') : multiColorBackground(dayCategoryColors(tasks), '33');
       const isToday = today.getFullYear()===y && today.getMonth()===mi && today.getDate()===d;
       const isSelected = state.view.calSelectedDate===dateStr;
-      daysHtml += `<div class="cal-year-day ${isToday?'today':''} ${isSelected?'selected':''}" data-date="${dateStr}" style="${bg?`background:${bg};`:''}">${d}</div>`;
+      daysHtml += `<div class="cal-year-day ${isToday?'today':''} ${isSelected?'selected':''}" data-date="${dateStr}" style="${bg?`background:${bg};`:''}" title="${holiday?escapeHtml(holiday.name):''}">${d}</div>`;
     }
     return `<div class="cal-year-month">
       <div class="cal-year-month-title" data-month-idx="${mi}">${monthName.charAt(0)+monthName.slice(1).toLowerCase()}</div>
@@ -2565,16 +2722,59 @@ function renderCalendarYearGrid(){
     });
   });
 }
-function renderCalendarDayList(){
-  const dateStr = state.view.calSelectedDate;
-  const tasks = getTasksForDate(dateStr).sort((a,b)=> a.description.localeCompare(b.description));
-  const todayStr = new Date().toISOString().slice(0,10);
-  const d = new Date(dateStr+'T00:00:00');
-  const label = d.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
-  document.getElementById('calDayListTitle').textContent = dateStr===todayStr ? 'Today — '+label : label;
+function renderCalendarRightPanel(){
+  const pageSize = 10;
+  const holidayBanner = document.getElementById('calHolidayBanner');
+  if(state.view.calRightMode === 'day' && state.view.calSelectedDate){
+    const dateStr = state.view.calSelectedDate;
+    const tasks = getTasksForDate(dateStr).sort((a,b)=> a.description.localeCompare(b.description));
+    const todayStr = new Date().toISOString().slice(0,10);
+    const d = new Date(dateStr+'T00:00:00');
+    const label = d.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    document.getElementById('calDayListTitle').textContent = dateStr===todayStr ? 'Today — '+label : label;
+    const holiday = getHoliday(dateStr);
+    if(holiday){
+      holidayBanner.style.display = 'flex';
+      holidayBanner.innerHTML = `<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 4.75c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg> Public Holiday — ${escapeHtml(holiday.name)}`;
+    } else {
+      holidayBanner.style.display = 'none';
+    }
+    const body = document.getElementById('calDayList');
+    body.innerHTML = tasks.length ? tasks.map(t=>tlItemHtml(t)).join('') : emptyHtml('No tasks scheduled for this day.');
+    bindTlItemClicks('calDayList');
+    document.getElementById('calPagination').style.display = 'none';
+    return;
+  }
+  holidayBanner.style.display = 'none';
+  const y = state.view.calYear, m = state.view.calMonthIndex;
+  const monthLabel = new Date(y, m, 1).toLocaleDateString('en-GB', {month:'long', year:'numeric'});
+  const allTasks = state.tasks.filter(t=>{
+    if(!calendarTaskMatches(t)) return false;
+    const d = new Date(t.date);
+    return !isNaN(d) && d.getFullYear()===y && d.getMonth()===m;
+  }).sort((a,b)=> (new Date(a.date) - new Date(b.date)) || a.description.localeCompare(b.description));
+  document.getElementById('calDayListTitle').textContent = 'This Month — ' + monthLabel;
+  const totalPages = Math.max(1, Math.ceil(allTasks.length / pageSize));
+  if(state.view.calRightPage >= totalPages) state.view.calRightPage = totalPages - 1;
+  if(state.view.calRightPage < 0) state.view.calRightPage = 0;
+  const startIdx = state.view.calRightPage * pageSize;
+  const pageTasks = allTasks.slice(startIdx, startIdx + pageSize);
   const body = document.getElementById('calDayList');
-  body.innerHTML = tasks.length ? tasks.map(t=>tlItemHtml(t)).join('') : emptyHtml('No tasks scheduled for this day.');
+  body.innerHTML = pageTasks.length ? pageTasks.map(t=>tlItemHtml(t)).join('') : emptyHtml('No tasks this month.');
   bindTlItemClicks('calDayList');
+  const pag = document.getElementById('calPagination');
+  if(allTasks.length > pageSize){
+    pag.style.display = 'flex';
+    document.getElementById('calPagInfo').textContent = `Page ${state.view.calRightPage+1} of ${totalPages} (${allTasks.length} tasks)`;
+    const prevBtn = document.getElementById('calPagPrevBtn');
+    const nextBtn = document.getElementById('calPagNextBtn');
+    prevBtn.style.opacity = state.view.calRightPage===0 ? '.35' : '1';
+    prevBtn.style.pointerEvents = state.view.calRightPage===0 ? 'none' : '';
+    nextBtn.style.opacity = state.view.calRightPage>=totalPages-1 ? '.35' : '1';
+    nextBtn.style.pointerEvents = state.view.calRightPage>=totalPages-1 ? 'none' : '';
+  } else {
+    pag.style.display = 'none';
+  }
 }
 
 let renameModalOnConfirm = null;
@@ -3405,6 +3605,32 @@ document.addEventListener('DOMContentLoaded', ()=>{
       renderCalendarView();
     });
   });
+  document.getElementById('calTypeDropdownBtn').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    const panel = document.getElementById('calTypeDropdownPanel');
+    const willOpen = !panel.classList.contains('open');
+    closeAllDropdownChecks();
+    if(willOpen) panel.classList.add('open');
+  });
+  document.getElementById('calTypeDropdownPanel').addEventListener('click', (e)=> e.stopPropagation());
+  document.getElementById('calAssigneeDropdownBtn').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    const panel = document.getElementById('calAssigneeDropdownPanel');
+    const willOpen = !panel.classList.contains('open');
+    closeAllDropdownChecks();
+    if(willOpen) panel.classList.add('open');
+  });
+  document.getElementById('calAssigneeDropdownPanel').addEventListener('click', (e)=> e.stopPropagation());
+  document.addEventListener('click', closeAllDropdownChecks);
+  document.getElementById('calPagPrevBtn').addEventListener('click', ()=>{
+    state.view.calRightPage -= 1;
+    renderCalendarRightPanel();
+  });
+  document.getElementById('calPagNextBtn').addEventListener('click', ()=>{
+    state.view.calRightPage += 1;
+    renderCalendarRightPanel();
+  });
+  document.getElementById('btnAddHoliday').addEventListener('click', addHoliday);
 
   document.getElementById('btnAddTask').addEventListener('click', ()=> openModal(null));
   document.getElementById('modalClose').addEventListener('click', closeModal);
