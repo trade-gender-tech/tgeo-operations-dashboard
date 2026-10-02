@@ -401,8 +401,8 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
 .cal-cell.outside:hover{transform:none; box-shadow:none;}
 .cal-cell.today{border-color:var(--violet);}
 .cal-cell.selected{background:var(--violet-pale); border-color:var(--violet); box-shadow:0 0 0 1px var(--violet) inset;}
-.cal-cell.holiday{background:rgba(244,63,94,0.10); border-color:rgba(244,63,94,0.3);}
-.cal-cell-daynum{font-size:14px; font-weight:800; color:var(--text-dim); display:flex; align-items:center; gap:4px;}
+.cal-cell.holiday{background:rgba(244,63,94,0.18); border-color:rgba(244,63,94,0.45);}
+.cal-cell-daynum{font-size:14px; font-weight:800; color:var(--text); display:flex; align-items:center; gap:4px;}
 .cal-cell.today .cal-cell-daynum{color:var(--violet);}
 .cal-cell-holiday-dot{width:6px; height:6px; border-radius:50%; background:#f43f5e; display:inline-block;}
 .cal-cell-dots{display:flex; gap:4px; flex-wrap:wrap; margin-top:6px;}
@@ -1180,13 +1180,14 @@ const STATUS_CLASS = {
 };
 const GENERIC_CAT_ICON = 'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z';
 const DEFAULT_CATEGORIES = [
-  { key:'IWG', label:'IWG', tabName:'IWG', bg:'#efe9fc', fg:'#7c3aed',
+  { key:'IWG', label:'IWG', tabName:'IWG', bg:'#dbeafe', fg:'#2563eb',
     icon:'M17 20h5v-1a4 4 0 00-3-3.87M9 20H4v-1a4 4 0 013-3.87m5-8a4 4 0 100 8 4 4 0 000-8zM9 8a4 4 0 10-.5 7.94M17 8a4 4 0 01-.5 7.94' },
-  { key:'Capacity Building', label:'Capacity Building', tabName:'CAPACITY BUILDING', bg:'#dcfaf0', fg:'#0d9268',
+  { key:'Capacity Building', label:'Capacity Building', tabName:'CAPACITY BUILDING', bg:'#ffedd5', fg:'#ea580c',
     icon:'M12 6.5V19M8 9l4-3 4 3M4 19h16' },
-  { key:'Research', label:'Research', tabName:'RESEARCH', bg:'#e2ecfe', fg:'#2563eb',
+  { key:'Research', label:'Research', tabName:'RESEARCH', bg:'#dcfce7', fg:'#16a34a',
     icon:'M9 4.5h6M12 4.5v6m-5 3.5h10l1.5 6h-13z' }
 ];
+const DEFAULT_CATEGORY_COLORS = { 'IWG': {bg:'#dbeafe', fg:'#2563eb'}, 'Capacity Building': {bg:'#ffedd5', fg:'#ea580c'}, 'Research': {bg:'#dcfce7', fg:'#16a34a'} };
 const CATEGORY_COLOR_PALETTE = [
   {bg:'#fdf0d9', fg:'#b45309'}, {bg:'#fde3e8', fg:'#c81e3a'}, {bg:'#fce7f3', fg:'#be185d'},
   {bg:'#e0f2fe', fg:'#0369a1'}, {bg:'#ecfccb', fg:'#4d7c0f'}, {bg:'#ede9fe', fg:'#6d28d9'}
@@ -1342,6 +1343,10 @@ function loadState(){
   if(!state.calendarDefaultTypes || !state.calendarDefaultTypes.length) state.calendarDefaultTypes = ['Meeting/Event'];
   if(!state.calendarVisibleTypes || !state.calendarVisibleTypes.length) state.calendarVisibleTypes = state.calendarDefaultTypes.slice();
   if(!Array.isArray(state.holidays)) state.holidays = DEFAULT_HOLIDAYS.slice();
+  state.categories.forEach(c=>{
+    const fixed = DEFAULT_CATEGORY_COLORS[c.key];
+    if(fixed){ c.bg = fixed.bg; c.fg = fixed.fg; }
+  });
 }
 function persistLocal(){
   const payload = JSON.stringify({tasks: state.tasks, formstack: state.formstack, todos: state.todos, notes: state.notes,
@@ -2670,7 +2675,7 @@ function renderCalendarGrid(){
     } else {
       innerHtml = '';
     }
-    const bg = tasks.length ? multiColorBackground(dayCategoryColors(tasks), '20') : '';
+    const bg = tasks.length ? multiColorBackground(dayCategoryColors(tasks), '38') : '';
     const holidayCls = c.holiday ? 'holiday' : '';
     return `<div class="cal-cell ${c.isToday?'today':''} ${c.isSelected?'selected':''} ${holidayCls}" data-date="${c.dateStr}" style="${bg && !c.holiday ?`background:${bg};`:''}" title="${c.holiday?escapeHtml(c.holiday.name):''}">
       <div class="cal-cell-daynum">${c.day}${c.holiday?' <span class="cal-cell-holiday-dot"></span>':''}</div>
@@ -2702,7 +2707,7 @@ function renderCalendarYearGrid(){
       const dateStr = `${y}-${String(mi+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
       const tasks = tasksByDate[dateStr]||[];
       const holiday = getHoliday(dateStr);
-      const bg = holiday ? (HOLIDAY_COLOR+'33') : multiColorBackground(dayCategoryColors(tasks), '33');
+      const bg = holiday ? (HOLIDAY_COLOR+'4D') : multiColorBackground(dayCategoryColors(tasks), '4D');
       const isToday = today.getFullYear()===y && today.getMonth()===mi && today.getDate()===d;
       const isSelected = state.view.calSelectedDate===dateStr;
       daysHtml += `<div class="cal-year-day ${isToday?'today':''} ${isSelected?'selected':''}" data-date="${dateStr}" style="${bg?`background:${bg};`:''}" title="${holiday?escapeHtml(holiday.name):''}">${d}</div>`;
