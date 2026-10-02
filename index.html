@@ -328,6 +328,9 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
 .tl-body{flex:1; min-width:0;}
 .tl-body .t{font-size:13.5px; font-weight:700;}
 .tl-body .s{font-size:11.5px; color:var(--text-dim); margin-top:2px;}
+.tl-item.overdue .tl-date{color:#c81e3a;}
+.upcoming-group-header{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
+.upcoming-group-name{font-size:12.5px; font-weight:800; color:var(--text);}
 
 /* ---------- CALENDAR VIEW ---------- */
 .timeline-mode-row{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:14px;}
@@ -722,7 +725,7 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
           </div>
           <div class="panel">
             <div class="panel-head">
-              <div><h2>Upcoming &amp; In Progress</h2><div class="desc">Next 10 tasks needing attention, across all workstreams</div></div>
+              <div><h2>Upcoming &amp; Overdue</h2><div class="desc">Overdue tasks and anything due in the next 7 days, grouped by who's assigned</div></div>
             </div>
             <div class="timeline-list" id="upcomingList"></div>
           </div>
@@ -954,7 +957,7 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
         </div>
       </div>
       <div class="form-grid">
-        <div class="form-row"><label>Due Date</label><input type="date" id="f_date"></div>
+        <div class="form-row"><label id="f_dateLabel">Due Date</label><input type="date" id="f_date"></div>
         <div class="form-row"><label>Assigned Person</label><select id="f_assignedPerson"><option value="">Unassigned</option></select></div>
       </div>
       <div class="form-grid">
@@ -972,6 +975,14 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
         </div>
         <div id="checklistItems"></div>
         <div class="checklist-empty" id="checklistEmptyNote">No to-do items yet — add one above.</div>
+      </div>
+      <div class="checklist-box" id="meetingDatesBox" style="display:none;">
+        <div class="checklist-head">
+          <label>Additional Meeting Dates</label>
+          <button type="button" class="btn btn-sm" id="btnAddMeetingDate">+ Add Date</button>
+        </div>
+        <div id="meetingDatesItems"></div>
+        <div class="checklist-empty" id="meetingDatesEmptyNote">This meeting only occurs on the date above — add more if it recurs.</div>
       </div>
       <div class="checklist-box">
         <div class="checklist-head">
@@ -1270,7 +1281,8 @@ let state = {
   searchTerm: '',
   view: { category: 'IWG', subCategory: null, activity: null, month: null, statusFilter: null,
     timelineMode: 'list', calViewMode: 'month', calYear: new Date().getFullYear(), calMonthIndex: new Date().getMonth(),
-    calAssigneeFilter: [], calSelectedDate: new Date().toISOString().slice(0,10), calRightMode: 'month', calRightPage: 0 },
+    calAssigneeFilter: [], calSelectedDate: new Date().toISOString().slice(0,10), calRightMode: 'month', calRightPage: 0,
+    activityStageFilter: null },
   formstackTab: 'live',
   expandedCat: 'IWG',
   categories: [],
@@ -1392,7 +1404,8 @@ function taskToSheetRow(t){
     ClosureNotes: t.closureNotes||'', CancellationCategory: t.cancellationCategory||'',
     PrivateNotes: JSON.stringify(t.privateNotes||{}),
     Checklist: JSON.stringify(t.checklist||[]),
-    LinkedActivities: JSON.stringify(t.linkedActivities||[])
+    LinkedActivities: JSON.stringify(t.linkedActivities||[]),
+    MeetingDates: JSON.stringify(t.meetingDates||[])
   };
 }
 function sheetRowToTask(r){
@@ -1402,13 +1415,15 @@ function sheetRowToTask(r){
   try{ checklist = r.Checklist ? JSON.parse(r.Checklist) : []; }catch(e){}
   let linkedActivities = [];
   try{ linkedActivities = r.LinkedActivities ? JSON.parse(r.LinkedActivities) : []; }catch(e){}
+  let meetingDates = [];
+  try{ meetingDates = r.MeetingDates ? JSON.parse(r.MeetingDates) : []; }catch(e){}
   return {
     id: r.ID, category: tabNameToCategoryKey(r.Category)||'IWG', month: r.Month||'', date: r.Date||'', subCategory: r.SubCategory||'', activity: r.Activity||'',
     taskType: r.TaskType||'', description: r.Task||'', assignedPerson: r.AssignedPerson||'',
     status: r.Status||'Not Started', statusComment: r.StatusComment||'', revisedDate: r.RevisedDate||'',
     links: r.Links||'', comments: r.Comments||'', createdDate: r.CreatedDate||'',
     completionDate: r.CompletionDate||'', hoursSpent: r.HoursSpent||'', nDrivePath: r.NDrivePath||'',
-    closureNotes: r.ClosureNotes||'', cancellationCategory: r.CancellationCategory||'', privateNotes, checklist, linkedActivities
+    closureNotes: r.ClosureNotes||'', cancellationCategory: r.CancellationCategory||'', privateNotes, checklist, linkedActivities, meetingDates
   };
 }
 async function sheetsPost(payload){
@@ -1800,14 +1815,22 @@ const CANCEL_CATEGORIES = ['Lack of Resources','Lack of Budget','Low Participati
 async function saveTaskFromForm(){
   const id = document.getElementById('f_id').value;
   const existing = id ? state.tasks.find(t=>t.id===id) : null;
+  const taskType = document.getElementById('f_taskType').value.trim();
+  const rawDate = document.getElementById('f_date').value || (existing ? existing.date||'' : '');
+  let meetingDates = [];
+  if(taskType === 'Meeting/Event'){
+    meetingDates = Array.from(new Set([rawDate, ...modalMeetingDates].filter(Boolean))).sort();
+  }
+  const finalDate = meetingDates.length ? meetingDates[0] : rawDate;
   const task = {
     id: id || uid('T'),
     category: document.getElementById('f_category').value,
     month: document.getElementById('f_month').value,
-    date: document.getElementById('f_date').value || (existing ? existing.date||'' : ''),
+    date: finalDate,
     subCategory: document.getElementById('f_subCategory').value.trim(),
     activity: document.getElementById('f_activity').value.trim(),
-    taskType: document.getElementById('f_taskType').value.trim(),
+    taskType,
+    meetingDates,
     description: document.getElementById('f_description').value.trim(),
     assignedPerson: document.getElementById('f_assignedPerson').value.trim(),
     status: document.getElementById('f_status').value,
@@ -1888,9 +1911,26 @@ function populateCategorySelect(selectEl, selected){
   selectEl.value = selected;
 }
 let modalChecklist = [];
+let modalMeetingDates = [];
 function updateChecklistVisibility(){
   const isMeeting = document.getElementById('f_taskType').value.trim() === 'Meeting/Event';
   document.getElementById('checklistBox').style.display = isMeeting ? '' : 'none';
+  document.getElementById('meetingDatesBox').style.display = isMeeting ? '' : 'none';
+  document.getElementById('f_dateLabel').textContent = isMeeting ? 'Meeting Date' : 'Due Date';
+}
+function renderMeetingDatesItems(){
+  const box = document.getElementById('meetingDatesItems');
+  box.innerHTML = modalMeetingDates.map((date,idx)=>`
+    <div class="checklist-row" data-idx="${idx}">
+      <input type="date" class="md-date" value="${date||''}">
+      <span class="icon-btn danger md-remove" title="Remove"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg></span>
+    </div>`).join('');
+  document.getElementById('meetingDatesEmptyNote').classList.toggle('show', modalMeetingDates.length===0);
+  box.querySelectorAll('.checklist-row').forEach(row=>{
+    const idx = parseInt(row.dataset.idx, 10);
+    row.querySelector('.md-date').addEventListener('change', (e)=>{ modalMeetingDates[idx] = e.target.value; });
+    row.querySelector('.md-remove').addEventListener('click', ()=>{ modalMeetingDates.splice(idx,1); renderMeetingDatesItems(); });
+  });
 }
 function renderChecklistItems(){
   const box = document.getElementById('checklistItems');
@@ -1960,6 +2000,8 @@ function openModal(task, prefill){
   f('f_taskType', task ? task.taskType : 'Administrative');
   modalChecklist = task && Array.isArray(task.checklist) ? JSON.parse(JSON.stringify(task.checklist)) : [];
   renderChecklistItems();
+  modalMeetingDates = task && Array.isArray(task.meetingDates) ? task.meetingDates.filter(d=> d!==task.date) : [];
+  renderMeetingDatesItems();
   updateChecklistVisibility();
   modalLinkedActivities = task && Array.isArray(task.linkedActivities) ? JSON.parse(JSON.stringify(task.linkedActivities)) : [];
   renderLinkedActivities();
@@ -2330,12 +2372,7 @@ function renderOverview(){
   });
   renderMiniLegend('legendTaskType', typeLabels, typeCounts, typeColors, 5);
 
-  const upcomingItems = tasks
-    .filter(t=> ['Upcoming','Pending','In progress'].includes(t.status) && matchesSearch(t))
-    .sort((a,b)=> new Date(a.date||'2100-01-01') - new Date(b.date||'2100-01-01'))
-    .slice(0,10);
-  document.getElementById('upcomingList').innerHTML = upcomingItems.length ? upcomingItems.map(t=>tlItemHtml(t)).join('') : emptyHtml('Nothing in progress or upcoming right now.');
-  bindTlItemClicks('upcomingList');
+  renderUpcomingOverdue();
 
   renderLiveForms();
 }
@@ -2432,6 +2469,62 @@ function tlItemHtml(t){
     ${catBadgeHtml(t.category)}
     ${badgeHtml(t.status)}
   </div>`;
+}
+function daysFromToday(dateStr){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(dateStr+'T00:00:00');
+  if(isNaN(d)) return null;
+  return Math.round((d - today) / 86400000);
+}
+function upcomingOverdueItemHtml(t){
+  const diff = daysFromToday(t.date);
+  const dt = new Date(t.date);
+  const day = !isNaN(dt) ? dt.getDate() : '—';
+  const mon = !isNaN(dt) ? dt.toLocaleDateString('en-GB',{month:'short'}) : '';
+  const overdue = diff !== null && diff < 0;
+  const tag = diff===null ? '' : overdue ? `<span class="badge badge-delayed">${-diff}d overdue</span>` : diff===0 ? `<span class="badge badge-upcoming">Due today</span>` : `<span class="badge badge-upcoming">Due in ${diff}d</span>`;
+  return `<div class="tl-item ${overdue?'overdue':''}" data-id="${t.id}">
+    <div class="tl-date"><div class="d">${day}</div><div class="m">${mon}</div></div>
+    <div class="tl-body"><div class="t">${escapeHtml(t.description)}</div><div class="s">${escapeHtml(t.subCategory)} · ${escapeHtml(t.activity)}</div></div>
+    ${catBadgeHtml(t.category)}
+    ${tag}
+  </div>`;
+}
+function renderUpcomingOverdue(){
+  const horizon = 7;
+  const relevant = state.tasks.filter(t=>{
+    if(t.status==='Done' || t.status==='Cancelled') return false;
+    if(!t.date || !matchesSearch(t)) return false;
+    const diff = daysFromToday(t.date);
+    return diff !== null && diff <= horizon;
+  });
+  const groups = {};
+  relevant.forEach(t=>{
+    const key = t.assignedPerson || 'Unassigned';
+    if(!groups[key]) groups[key] = [];
+    groups[key].push(t);
+  });
+  const names = Object.keys(groups).sort((a,b)=>{
+    if(a==='Unassigned') return 1;
+    if(b==='Unassigned') return -1;
+    return a.localeCompare(b);
+  });
+  const box = document.getElementById('upcomingList');
+  if(!names.length){ box.innerHTML = emptyHtml('Nothing overdue or due in the next 7 days.'); return; }
+  box.innerHTML = names.map(name=>{
+    const items = groups[name].slice().sort((a,b)=> daysFromToday(a.date) - daysFromToday(b.date));
+    const overdueCount = items.filter(t=> daysFromToday(t.date) < 0).length;
+    const upcomingCount = items.length - overdueCount;
+    return `<div class="upcoming-group">
+      <div class="upcoming-group-header">
+        <span class="upcoming-group-name">${escapeHtml(name)}</span>
+        ${overdueCount ? `<span class="badge badge-delayed">${overdueCount} overdue</span>` : ''}
+        ${upcomingCount ? `<span class="badge badge-upcoming">${upcomingCount} upcoming</span>` : ''}
+      </div>
+      <div class="timeline-list">${items.map(t=>upcomingOverdueItemHtml(t)).join('')}</div>
+    </div>`;
+  }).join('');
+  bindTlItemClicks('upcomingList');
 }
 function bindTlItemClicks(containerId){
   document.querySelectorAll('#'+containerId+' .tl-item').forEach(el=>{
@@ -2553,6 +2646,10 @@ function calendarTaskMatches(t){
     (state.view.calAssigneeFilter.length===0 || state.view.calAssigneeFilter.includes(t.assignedPerson)) &&
     matchesSearch(t);
 }
+function getTaskDates(t){
+  if(t.taskType==='Meeting/Event' && Array.isArray(t.meetingDates) && t.meetingDates.length) return t.meetingDates;
+  return t.date ? [t.date] : [];
+}
 function dayCategoryColors(tasks){
   const seen = new Map();
   tasks.forEach(t=>{
@@ -2609,7 +2706,7 @@ function renderCalendarView(){
   renderCalendarRightPanel();
 }
 function getTasksForDate(dateStr){
-  return state.tasks.filter(t=> t.date===dateStr && calendarTaskMatches(t));
+  return state.tasks.filter(t=> calendarTaskMatches(t) && getTaskDates(t).includes(dateStr));
 }
 function selectCalendarDate(dateStr){
   const cameFromYearView = state.view.calViewMode === 'year';
@@ -2632,11 +2729,13 @@ function renderCalendarGrid(){
   document.getElementById('calMonthTitle').textContent = new Date(y, m, 1).toLocaleDateString('en-GB',{month:'long', year:'numeric'});
   const tasksByDay = {};
   state.tasks.filter(calendarTaskMatches).forEach(t=>{
-    const d = new Date(t.date);
-    if(isNaN(d) || d.getFullYear()!==y || d.getMonth()!==m) return;
-    const day = d.getDate();
-    if(!tasksByDay[day]) tasksByDay[day] = [];
-    tasksByDay[day].push(t);
+    getTaskDates(t).forEach(dateStr=>{
+      const d = new Date(dateStr+'T00:00:00');
+      if(isNaN(d) || d.getFullYear()!==y || d.getMonth()!==m) return;
+      const day = d.getDate();
+      if(!tasksByDay[day]) tasksByDay[day] = [];
+      tasksByDay[day].push(t);
+    });
   });
   const firstDow = (new Date(y, m, 1).getDay() + 6) % 7; // Monday=0
   const daysInMonth = new Date(y, m+1, 0).getDate();
@@ -2691,10 +2790,12 @@ function renderCalendarYearGrid(){
   const y = state.view.calYear;
   const tasksByDate = {};
   state.tasks.filter(calendarTaskMatches).forEach(t=>{
-    const d = new Date(t.date);
-    if(isNaN(d) || d.getFullYear()!==y) return;
-    if(!tasksByDate[t.date]) tasksByDate[t.date] = [];
-    tasksByDate[t.date].push(t);
+    getTaskDates(t).forEach(dateStr=>{
+      const d = new Date(dateStr+'T00:00:00');
+      if(isNaN(d) || d.getFullYear()!==y) return;
+      if(!tasksByDate[dateStr]) tasksByDate[dateStr] = [];
+      tasksByDate[dateStr].push(t);
+    });
   });
   const today = new Date();
   const dow = ['M','T','W','T','F','S','S'];
@@ -2756,11 +2857,17 @@ function renderCalendarRightPanel(){
   holidayBanner.style.display = 'none';
   const y = state.view.calYear, m = state.view.calMonthIndex;
   const monthLabel = new Date(y, m, 1).toLocaleDateString('en-GB', {month:'long', year:'numeric'});
-  const allTasks = state.tasks.filter(t=>{
-    if(!calendarTaskMatches(t)) return false;
-    const d = new Date(t.date);
+  const inMonth = (dateStr)=>{
+    const d = new Date(dateStr+'T00:00:00');
     return !isNaN(d) && d.getFullYear()===y && d.getMonth()===m;
-  }).sort((a,b)=> (new Date(a.date) - new Date(b.date)) || a.description.localeCompare(b.description));
+  };
+  const allTasks = state.tasks.filter(t=> calendarTaskMatches(t) && getTaskDates(t).some(inMonth))
+    .map(t=>{
+      const sortDate = getTaskDates(t).filter(inMonth).sort()[0];
+      return { t, sortDate };
+    })
+    .sort((a,b)=> (new Date(a.sortDate) - new Date(b.sortDate)) || a.t.description.localeCompare(b.t.description))
+    .map(x=>x.t);
   document.getElementById('calDayListTitle').textContent = 'This Month — ' + monthLabel;
   const totalPages = Math.max(1, Math.ceil(allTasks.length / pageSize));
   if(state.view.calRightPage >= totalPages) state.view.calRightPage = totalPages - 1;
@@ -2912,19 +3019,28 @@ function renderCategoryView(){
   }
 
   if(!state.view.activity){
-    filterRow.innerHTML = '';
     const acts = hier[state.view.subCategory] || {};
     const actOrderKey = state.view.category + ACTIVITY_KEY_SEP + state.view.subCategory;
-    const actNames = applyCustomOrder(Object.keys(acts), state.activityOrder[actOrderKey]);
-    if(actNames.length>1){
+    const allActs = applyCustomOrder(Object.keys(acts), state.activityOrder[actOrderKey]);
+    if(allActs.length>1){
       reorderBtn.style.display = '';
-      reorderBtn.onclick = ()=> openReorderModal('Reorder Activities', actNames, (newOrder)=>{
+      reorderBtn.onclick = ()=> openReorderModal('Reorder Activities', allActs, (newOrder)=>{
         state.activityOrder[actOrderKey] = newOrder;
         persistLocal();
         renderCategoryView();
         toast('Activity order updated');
       });
     }
+    const stages = ['All','Upcoming','Ongoing','Completed'];
+    filterRow.innerHTML = stages.map(s=>`<div class="chip ${state.view.activityStageFilter===s || (!state.view.activityStageFilter&&s==='All')?'active':''}" data-stage="${escapeHtml(s)}">${escapeHtml(s)}</div>`).join('');
+    filterRow.querySelectorAll('.chip').forEach(chip=>{
+      chip.addEventListener('click', ()=>{
+        state.view.activityStageFilter = chip.dataset.stage==='All' ? null : chip.dataset.stage;
+        renderCategoryView();
+      });
+    });
+    const actNames = allActs.filter(ac=> !state.view.activityStageFilter || activityStage(acts[ac])===state.view.activityStageFilter);
+    if(!actNames.length){ body.innerHTML = emptyHtml('No activities match this filter.'); return; }
     body.innerHTML = `<div class="card-grid">` + actNames.map(ac=>{
       const tasks = acts[ac];
       const stage = activityStage(tasks);
@@ -3650,6 +3766,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('btnAddChecklistItem').addEventListener('click', ()=>{
     modalChecklist.push({ id: uid('CL'), text:'', assignedPerson:'', deadline:'', done:false });
     renderChecklistItems();
+  });
+  document.getElementById('btnAddMeetingDate').addEventListener('click', ()=>{
+    modalMeetingDates.push('');
+    renderMeetingDatesItems();
   });
   document.getElementById('btnAddLinkedActivity').addEventListener('click', ()=>{
     modalLinkedActivities.push(null);
