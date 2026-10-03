@@ -404,10 +404,10 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
 .cal-cell.outside:hover{transform:none; box-shadow:none;}
 .cal-cell.today{border-color:var(--violet);}
 .cal-cell.selected{background:var(--violet-pale); border-color:var(--violet); box-shadow:0 0 0 1px var(--violet) inset;}
-.cal-cell.holiday{background:rgba(244,63,94,0.18); border-color:rgba(244,63,94,0.45);}
+.cal-cell.holiday{background:rgba(107,114,128,0.18); border-color:rgba(107,114,128,0.45);}
 .cal-cell-daynum{font-size:14px; font-weight:800; color:var(--text); display:flex; align-items:center; gap:4px;}
 .cal-cell.today .cal-cell-daynum{color:var(--violet);}
-.cal-cell-holiday-dot{width:6px; height:6px; border-radius:50%; background:#f43f5e; display:inline-block;}
+.cal-cell-holiday-dot{width:6px; height:6px; border-radius:50%; background:#6b7280; display:inline-block;}
 .cal-cell-dots{display:flex; gap:4px; flex-wrap:wrap; margin-top:6px;}
 .cal-dot{width:7px; height:7px; border-radius:50%; flex-shrink:0;}
 .cal-dot-more{font-size:8.5px; font-weight:800; color:var(--text-faint);}
@@ -2670,7 +2670,7 @@ function truncateWords(text, n){
   if(words.length<=n) return words.join(' ');
   return words.slice(0,n).join(' ') + '…';
 }
-const HOLIDAY_COLOR = '#f43f5e';
+const HOLIDAY_COLOR = '#6b7280';
 function getHoliday(dateStr){
   return state.holidays.find(h=>h.date===dateStr) || null;
 }
