@@ -167,6 +167,7 @@ a, button, .btn, .nav-item, .chip, .icon-btn, .entity-card, .kpi-card, .ring-car
   padding:22px 18px; display:flex; flex-direction:column; align-items:center; text-align:center;
 }
 .ring-card:hover{transform:translateY(-3px); box-shadow:var(--shadow-md);}
+.ring-card-clickable{cursor:pointer;}
 .ring-wrap{position:relative; width:104px; height:104px;}
 .ring-wrap svg{width:100%; height:100%;}
 .ring-bg{fill:none; stroke:var(--panel-2); stroke-width:9;}
@@ -2281,13 +2282,16 @@ function renderRings(){
   const delayedTasks = tasks.filter(isDelayed);
   const totalDelayDays = delayedTasks.reduce((sum,t)=>sum+delayDays(t), 0);
   const avgDelay = delayedTasks.length ? Math.round((totalDelayDays/delayedTasks.length)*10)/10 : 0;
+  const overdueTasks = tasks.filter(t=>t.status!=='Done' && t.status!=='Cancelled' && t.date && daysFromToday(t.date) < 0);
+  const totalOverdueDays = overdueTasks.reduce((sum,t)=>sum+Math.abs(daysFromToday(t.date)), 0);
+  const avgOverdue = overdueTasks.length ? Math.round((totalOverdueDays/overdueTasks.length)*10)/10 : 0;
   const metrics = [
     {type:'ring', label:'Overall Completion', pct: Math.round((done/total)*100), sub: done+' of '+total+' tasks', from:'#34d399', to:'#0d9268'},
     {type:'ring', label:'Active Right Now', pct: Math.round((active/total)*100), sub: active+' in progress / upcoming', from:'#60a5fa', to:'#2563eb'},
     {type:'ring', label:'On-Time Delivery', pct: done ? Math.round((onTime/done)*100) : 0, sub: onTime+' of '+done+' completed on time', from:'#a78bfa', to:'#7c3aed'},
+    {type:'plain', label:'Delayed', value: delayedTasks.length, sub: delayedTasks.length+' of '+done+' completed tasks ran late, avg '+avgDelay+'d', color:'#c2410c'},
     {type:'ring', label:'Cancellation Rate', pct: Math.round((cancelled/total)*100), sub: cancelled+' cancelled', from:'#fb7185', to:'#c81e3a'},
-    {type:'plain', label:'Tasks Delayed', value: delayedTasks.length, sub: delayedTasks.length+' of '+done+' completed tasks ran late', color:'#c2410c'},
-    {type:'plain', label:'Avg Delay', value: avgDelay+'d', sub: 'average days late, per delayed task', color:'#c2410c'}
+    {type:'plain', label:'Overdue', value: overdueTasks.length, sub: overdueTasks.length+' open task'+(overdueTasks.length===1?'':'s')+', avg '+avgOverdue+'d overdue', color:'#dc2626', clickable:true}
   ];
   document.getElementById('ringRow').innerHTML = metrics.map((m,i)=> m.type==='ring' ? `
     <div class="ring-card">
@@ -2295,11 +2299,17 @@ function renderRings(){
       <div class="ring-name">${escapeHtml(m.label)}</div>
       <div class="ring-sub">${escapeHtml(m.sub)}</div>
     </div>` : `
-    <div class="ring-card">
+    <div class="ring-card${m.clickable?' ring-card-clickable':''}"${m.clickable?' onclick="scrollToUpcomingOverdue()"':''}>
       <div class="ring-wrap plain-stat"><div class="ring-value" style="color:${m.color}; font-size:28px;">${escapeHtml(String(m.value))}</div></div>
       <div class="ring-name">${escapeHtml(m.label)}</div>
       <div class="ring-sub">${escapeHtml(m.sub)}</div>
     </div>`).join('');
+}
+function scrollToUpcomingOverdue(){
+  const list = document.getElementById('upcomingList');
+  if(!list) return;
+  const panel = list.closest('.panel') || list;
+  panel.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 /* ---------------- OVERVIEW ---------------- */
