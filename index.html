@@ -3089,8 +3089,8 @@ function renderCategoryView(){
         </div>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th style="width:30px;"></th><th>Created</th><th>Due Date</th><th>Task Type</th><th>Task</th><th>Assigned</th><th>Status</th><th></th></tr></thead>
-        <tbody>${tasks.length ? tasks.map(rowHtml).join('') : `<tr><td colspan="8">${emptyHtml('No tasks match this filter.')}</td></tr>`}</tbody>
+        <thead><tr><th style="width:30px;"></th><th>Due Date</th><th>Task Type</th><th>Task</th><th>Assigned</th><th>Status</th><th></th></tr></thead>
+        <tbody>${tasks.length ? tasks.map(rowHtml).join('') : `<tr><td colspan="7">${emptyHtml('No tasks match this filter.')}</td></tr>`}</tbody>
       </table></div>
     </div>`;
   document.getElementById('btnAddTaskHere').addEventListener('click', ()=> openModal(null, {category: state.view.category, subCategory: state.view.subCategory, activity: state.view.activity}));
@@ -3160,7 +3160,6 @@ function rowHtml(t){
   const isOpen = t.status !== 'Done' && t.status !== 'Cancelled';
   return `<tr class="task-row" data-id="${t.id}">
     <td class="expand-cell"><span class="icon-btn expand-btn" title="Show details"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></span></td>
-    <td>${fmtDate(t.createdDate)}</td>
     <td>${fmtDate(t.date)}</td>
     <td>${escapeHtml(t.taskType||'—')}</td>
     <td class="desc-cell">${escapeHtml(t.description)}${t.statusComment && t.status==='Cancelled' ? `<div style="color:#b91c1c; font-size:11px; margin-top:3px;">Reason: ${escapeHtml(t.statusComment)}</div>`:''}</td>
@@ -3173,7 +3172,7 @@ function rowHtml(t){
     </td>
   </tr>
   <tr class="task-detail-row" data-detail-for="${t.id}" style="display:none;">
-    <td colspan="8">${taskDetailHtml(t)}</td>
+    <td colspan="7">${taskDetailHtml(t)}</td>
   </tr>`;
 }
 function bindRowClicks(){
