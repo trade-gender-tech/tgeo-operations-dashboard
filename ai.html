@@ -100,6 +100,9 @@ a, button, .btn, .nav-item, .chip, .icon-btn, .entity-card, .kpi-card, .ring-car
   max-height:600px; overflow:hidden; opacity:1; transition:max-height .25s ease, opacity .2s ease, margin .2s ease;}
 .sub-nav.collapsed{max-height:0; opacity:0; margin-top:0; margin-bottom:0; border-color:transparent;}
 .sub-nav .nav-item{font-size:12.5px; padding:7px 10px;}
+.sub-nav-group-label{font-size:10px; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-faint); padding:10px 10px 3px; }
+.sub-nav-group-label:first-child{padding-top:4px;}
+.nav-item.grouped-sub{padding-left:18px;}
 .cat-chevron{width:14px; height:14px; flex-shrink:0; transition:transform .2s ease; opacity:.6;}
 .cat-chevron.expanded{transform:rotate(90deg);}
 .nav-item.active .cat-chevron{opacity:1;}
@@ -815,7 +818,10 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
       <div class="view" id="view-category">
         <div class="cat-top-row">
           <div class="crumbs" id="catCrumbs"></div>
-          <span class="icon-btn" id="btnReorderCards" title="Reorder" style="display:none;"><svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/></svg></span>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <button class="btn btn-sm btn-primary" id="btnAddGroupOrSubCat" style="display:none;"></button>
+            <span class="icon-btn" id="btnReorderCards" title="Reorder" style="display:none;"><svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/></svg></span>
+          </div>
         </div>
         <div class="chip-row" id="catStatusFilter"></div>
         <div id="catBody"></div>
@@ -906,26 +912,6 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
           <div style="display:flex; gap:10px;">
             <input type="text" id="newTaskTypeInput" placeholder="New task type, e.g. Translation" style="flex:1; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; color:var(--text); font-size:13.5px; outline:none;">
             <button class="btn btn-primary" id="btnAddTaskType">Add Type</button>
-          </div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-head"><div><h2>Sub-Category Groups</h2><div class="desc">Group related sub-categories together under a heading for a specific workstream (e.g. "Compendiums", "Other Events")</div></div></div>
-          <div class="form-row"><label>Workstream</label><select id="groupManageCategory"></select></div>
-          <div id="groupManageList" style="margin-bottom:16px;"></div>
-          <div style="display:flex; gap:10px;">
-            <input type="text" id="newGroupInput" placeholder="New group name, e.g. Compendiums" style="flex:1; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; color:var(--text); font-size:13.5px; outline:none;">
-            <button class="btn btn-primary" id="btnAddGroup">Add Group</button>
-          </div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-head"><div><h2>Sub-Categories</h2><div class="desc">Manage the sub-category list for a specific workstream, and assign each one to a group above</div></div></div>
-          <div class="form-row"><label>Workstream</label><select id="subCatManageCategory"></select></div>
-          <div id="subCatManageList" style="margin-bottom:16px;"></div>
-          <div style="display:flex; gap:10px;">
-            <input type="text" id="newSubCatInput" placeholder="New sub-category name" style="flex:1; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; color:var(--text); font-size:13.5px; outline:none;">
-            <button class="btn btn-primary" id="btnAddSubCat">Add Sub-Category</button>
           </div>
         </div>
 
@@ -1171,11 +1157,11 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
   </div>
 </div>
 
-<!-- ACTIVITY STATUS OVERRIDE MODAL -->
+<!-- GENERIC SELECT MODAL (activity status override, move sub-category to group) -->
 <div class="modal-overlay" id="statusOverrideModalOverlay">
   <div class="modal" style="max-width:420px;">
     <div class="modal-head">
-      <h3>Set Activity Status</h3>
+      <h3 id="statusOverrideModalTitle">Set Activity Status</h3>
       <div class="modal-close" id="statusOverrideModalClose">
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
       </div>
@@ -1598,8 +1584,6 @@ async function addCategory(){
   input.value = '';
   renderCategoryManage();
   renderCategoryNav();
-  renderSubCatManage();
-  renderGroupManage();
   toast('Workstream "'+name+'" added');
 }
 async function deleteCategory(key){
@@ -1619,8 +1603,6 @@ async function deleteCategory(key){
   persistLocal();
   renderCategoryManage();
   renderCategoryNav();
-  renderSubCatManage();
-  renderGroupManage();
   toast('Workstream deleted');
 }
 
@@ -1740,41 +1722,14 @@ function populateActivitySelect(selectEl, selectedKey, excludeKey){
   selectEl.value = selectedKey || '';
 }
 
-function renderGroupManage(){
-  const sel = document.getElementById('groupManageCategory');
-  const prevValue = sel.value;
-  sel.innerHTML = state.categories.map(c=>`<option value="${escapeHtml(c.key)}">${escapeHtml(c.label)}</option>`).join('');
-  sel.value = state.categories.some(c=>c.key===prevValue) ? prevValue : state.categories[0].key;
-  const catKey = sel.value;
-  const order = groupOrderForCategory(catKey);
-  document.getElementById('groupManageList').innerHTML = order.length ? order.map(g=>{
-    const count = (state.subCategories[catKey]||[]).filter(sc=> groupOfSubCategory(catKey, sc)===g).length;
-    return `<div class="manage-row" data-group="${escapeHtml(g)}">
-      <div class="mr-label">${escapeHtml(g)}</div>
-      <div class="mr-count">${count} sub-categor${count===1?'y':'ies'}</div>
-      <span class="icon-btn grp-edit-btn" title="Rename group"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.4-9.4a2 2 0 112.8 2.8L11 15l-4 1 1-4z"/></svg></span>
-      <span class="icon-btn danger grp-del-btn" title="${count>0?'Still in use':'Delete group'}"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg></span>
-    </div>`;
-  }).join('') : emptyHtml('No groups yet for this workstream — sub-categories will show ungrouped.');
-  document.querySelectorAll('.grp-edit-btn').forEach(btn=>{
-    btn.addEventListener('click', ()=> renameGroup(catKey, btn.closest('.manage-row').dataset.group));
-  });
-  document.querySelectorAll('.grp-del-btn').forEach(btn=>{
-    btn.addEventListener('click', ()=> deleteGroup(catKey, btn.closest('.manage-row').dataset.group));
-  });
-}
-function addGroup(){
-  const catKey = document.getElementById('groupManageCategory').value;
-  const input = document.getElementById('newGroupInput');
-  const name = input.value.trim();
-  if(!name){ toast('Enter a group name', 'error'); return; }
+function addGroupNamed(catKey, name){
+  if(!name){ toast('Enter a group name', 'error'); return false; }
   const bucket = ensureGroupBucket(catKey);
-  if(bucket.order.some(g=>g.toLowerCase()===name.toLowerCase())){ toast('That group already exists', 'error'); return; }
+  if(bucket.order.some(g=>g.toLowerCase()===name.toLowerCase())){ toast('That group already exists', 'error'); return false; }
   bucket.order.push(name);
   persistAndSyncGroups();
-  input.value = '';
-  renderGroupManage();
   toast('Group "'+name+'" added');
+  return true;
 }
 function renameGroup(catKey, oldName){
   openRenameModal('Rename Group', oldName, (trimmed)=>{
@@ -1787,7 +1742,6 @@ function renameGroup(catKey, oldName){
     Object.keys(bucket.of).forEach(sc=>{ if(bucket.of[sc]===oldName) bucket.of[sc] = trimmed; });
     if(state.view.category===catKey && state.view.subCategoryGroup===oldName) state.view.subCategoryGroup = trimmed;
     persistAndSyncGroups();
-    renderGroupManage();
     renderAll();
     toast('Renamed to "'+trimmed+'"');
   });
@@ -1795,51 +1749,25 @@ function renameGroup(catKey, oldName){
 function deleteGroup(catKey, name){
   const bucket = ensureGroupBucket(catKey);
   const count = (state.subCategories[catKey]||[]).filter(sc=> groupOfSubCategory(catKey, sc)===name).length;
-  if(count>0){ toast('This group still has '+count+' sub-categor'+(count===1?'y':'ies')+' — reassign them first', 'error'); return; }
+  if(count>0){ toast('This group still has '+count+' sub-categor'+(count===1?'y':'ies')+' — move them first', 'error'); return; }
   bucket.order = bucket.order.filter(g=>g!==name);
+  if(state.view.category===catKey && state.view.subCategoryGroup===name) state.view.subCategoryGroup = null;
   persistAndSyncGroups();
-  renderGroupManage();
+  renderAll();
   toast('Group deleted');
 }
-function renderSubCatManage(){
-  const sel = document.getElementById('subCatManageCategory');
-  const prevValue = sel.value;
-  sel.innerHTML = state.categories.map(c=>`<option value="${escapeHtml(c.key)}">${escapeHtml(c.label)}</option>`).join('');
-  sel.value = state.categories.some(c=>c.key===prevValue) ? prevValue : state.categories[0].key;
-  const catKey = sel.value;
-  const subs = state.subCategories[catKey] || [];
-  const groupOpts = [...groupOrderForCategory(catKey), UNGROUPED_LABEL];
-  document.getElementById('subCatManageList').innerHTML = subs.length ? subs.map(sc=>{
-    const count = state.tasks.filter(t=>t.category===catKey && t.subCategory===sc).length;
-    const currentGroup = groupOfSubCategory(catKey, sc);
-    return `<div class="manage-row" data-sc="${escapeHtml(sc)}">
-      <div class="mr-label">${escapeHtml(sc)}</div>
-      <div class="mr-count">${count} task${count===1?'':'s'}</div>
-      <select class="inline-filter-select sc-group-select" title="Assign to a group">
-        ${groupOpts.map(g=>`<option value="${escapeHtml(g)}" ${g===currentGroup?'selected':''}>${escapeHtml(g)}</option>`).join('')}
-      </select>
-      <span class="icon-btn sc-edit-btn" title="Rename sub-category"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.4-9.4a2 2 0 112.8 2.8L11 15l-4 1 1-4z"/></svg></span>
-      <span class="icon-btn danger sc-del-btn" title="${count>0?'Still in use':'Delete sub-category'}"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg></span>
-    </div>`;
-  }).join('') : emptyHtml('No sub-categories yet for this workstream.');
-  document.querySelectorAll('.sc-edit-btn').forEach(btn=>{
-    btn.addEventListener('click', ()=> renameSubCat(catKey, btn.closest('.manage-row').dataset.sc));
-  });
-  document.querySelectorAll('.sc-del-btn').forEach(btn=>{
-    btn.addEventListener('click', ()=> deleteSubCat(catKey, btn.closest('.manage-row').dataset.sc));
-  });
-  document.querySelectorAll('.sc-group-select').forEach(select=>{
-    select.addEventListener('change', (e)=>{
-      const sc = select.closest('.manage-row').dataset.sc;
-      const bucket = ensureGroupBucket(catKey);
-      bucket.of[sc] = e.target.value;
-      if(!bucket.order.includes(e.target.value) && e.target.value!==UNGROUPED_LABEL) bucket.order.push(e.target.value);
-      persistAndSyncGroups();
-      if(state.view.category===catKey && state.view.subCategory===sc) state.view.subCategoryGroup = e.target.value;
-      renderAll();
-      toast('"'+sc+'" moved to "'+e.target.value+'"');
-    });
-  });
+function addSubCatNamed(catKey, name, defaultGroup){
+  if(!name){ toast('Enter a sub-category name', 'error'); return false; }
+  if((state.subCategories[catKey]||[]).some(s=>s.toLowerCase()===name.toLowerCase())){ toast('That sub-category already exists', 'error'); return false; }
+  registerSubCategory(catKey, name);
+  if(defaultGroup){
+    const bucket = ensureGroupBucket(catKey);
+    bucket.of[name] = defaultGroup;
+  }
+  persistLocal();
+  if(defaultGroup) pushConfigToSheet('subCategoryGroups', state.subCategoryGroups);
+  toast('Sub-category "'+name+'" added');
+  return true;
 }
 function renameSubCat(catKey, oldName){
   openRenameModal('Rename Sub-Category', oldName, (trimmed)=>{
@@ -1877,25 +1805,10 @@ function renameSubCat(catKey, oldName){
     persistLocal();
     pushConfigToSheet('subCategoryGroups', state.subCategoryGroups);
     if(touchedOverrides.length) pushConfigToSheet('activityStatusOverrides', state.activityStatusOverride);
-    renderSubCatManage();
-    renderGroupManage();
     renderAll();
     toast('Renamed to "'+trimmed+'" — updated '+affected.length+' task(s)');
     syncTasksToSheet(affected);
   });
-}
-function addSubCat(){
-  const catKey = document.getElementById('subCatManageCategory').value;
-  const input = document.getElementById('newSubCatInput');
-  const name = input.value.trim();
-  if(!name){ toast('Enter a sub-category name', 'error'); return; }
-  if((state.subCategories[catKey]||[]).some(s=>s.toLowerCase()===name.toLowerCase())){ toast('That sub-category already exists', 'error'); return; }
-  registerSubCategory(catKey, name);
-  persistLocal();
-  input.value = '';
-  renderSubCatManage();
-  renderGroupManage();
-  toast('Sub-category "'+name+'" added');
 }
 function deleteSubCat(catKey, name){
   const count = state.tasks.filter(t=>t.category===catKey && t.subCategory===name).length;
@@ -1903,10 +1816,10 @@ function deleteSubCat(catKey, name){
   state.subCategories[catKey] = (state.subCategories[catKey]||[]).filter(s=>s!==name);
   const groupBucket = ensureGroupBucket(catKey);
   delete groupBucket.of[name];
+  if(state.view.category===catKey && state.view.subCategory===name) state.view.subCategory = null;
   persistLocal();
   pushConfigToSheet('subCategoryGroups', state.subCategoryGroups);
-  renderSubCatManage();
-  renderGroupManage();
+  renderAll();
   toast('Sub-category deleted');
 }
 
@@ -2395,7 +2308,7 @@ function ensureGroupBucket(catKey){
 function groupTilesForCategory(catKey, subCatNames){
   const order = groupOrderForCategory(catKey);
   const used = new Set(subCatNames.map(sc=> groupOfSubCategory(catKey, sc)));
-  const known = order.filter(g=> used.has(g));
+  const known = order.slice(); // show every configured group, even ones with no sub-categories in it yet
   const extra = [...used].filter(g=> !order.includes(g) && g!==UNGROUPED_LABEL).sort();
   const result = [...known, ...extra];
   if(used.has(UNGROUPED_LABEL)) result.push(UNGROUPED_LABEL);
@@ -2455,7 +2368,7 @@ function switchView(view, opts){
     todo:['To-Do List','Quick team checklist'],
     notes:['Notes','Freeform team notes'],
     formstack:['Formstack Forms','Live form response tracking'],
-    settings:['Settings','Manage team members, workstreams, task types and sub-categories']
+    settings:['Settings','Manage team members, workstreams and task types']
   };
   document.getElementById('topTitle').textContent = titles[view][0];
   document.getElementById('topSub').textContent = titles[view][1];
@@ -2470,8 +2383,6 @@ function switchView(view, opts){
   if(view==='settings'){
     renderCategoryManage();
     renderTaskTypeManage();
-    renderSubCatManage();
-    renderGroupManage();
     renderTeamMemberManage();
     renderCalDefaultTypesManage();
     renderHolidayManage();
@@ -2486,13 +2397,19 @@ function renderCategoryNav(){
     const hier = groupHierarchy(state.tasks.filter(t=>t.category===cat.key));
     const subs = Object.keys(hier).sort();
     const expanded = state.expandedCat === cat.key;
-    const subNav = subs.map(sc=>{
+    const hasGroups = groupOrderForCategory(cat.key).length > 0;
+    const subNavItem = (sc)=>{
       const n = Object.values(hier[sc]).flat().length;
       const subActive = state.view.category===cat.key && state.view.subCategory===sc;
-      return `<div class="nav-item ${subActive?'active':''}" data-cat="${escapeHtml(cat.key)}" data-subcat="${escapeHtml(sc)}">
+      return `<div class="nav-item ${hasGroups?'grouped-sub':''} ${subActive?'active':''}" data-cat="${escapeHtml(cat.key)}" data-subcat="${escapeHtml(sc)}">
         <span style="width:6px;height:6px;border-radius:50%;background:${cat.fg};flex-shrink:0;"></span>${escapeHtml(sc)}<span class="count">${n}</span>
       </div>`;
-    }).join('');
+    };
+    const subNav = hasGroups
+      ? groupTilesForCategory(cat.key, subs).map(g=>
+          `<div class="sub-nav-group-label">${escapeHtml(g)}</div>` + subCatsInGroup(cat.key, subs, g).map(subNavItem).join('')
+        ).join('')
+      : subs.map(subNavItem).join('');
     const catActive = state.view.category===cat.key && !state.view.subCategory;
     return `
       <div class="nav-item ${catActive?'active':''}" data-view="category" data-cat="${escapeHtml(cat.key)}">
@@ -3171,11 +3088,14 @@ function renderCalendarRightPanel(){
 }
 
 let renameModalOnConfirm = null;
-function openRenameModal(title, currentValue, onConfirm){
+function openRenameModal(title, currentValue, onConfirm, opts){
+  opts = opts || {};
   document.getElementById('renameModalTitle').textContent = title;
-  document.getElementById('renameModalLabel').textContent = 'Rename "'+currentValue+'" to';
+  document.getElementById('renameModalLabel').textContent = opts.labelText || ('Rename "'+currentValue+'" to');
+  document.getElementById('btnConfirmRenameModal').textContent = opts.confirmText || 'Rename';
   const input = document.getElementById('renameModalInput');
   input.value = currentValue;
+  input.placeholder = opts.placeholder || '';
   renameModalOnConfirm = onConfirm;
   document.getElementById('renameModalOverlay').classList.add('open');
   setTimeout(()=>{ input.focus(); input.select(); }, 30);
@@ -3246,30 +3166,53 @@ function applyReorderModal(){
   if(cb) cb(items);
 }
 
-/* ---------------- ACTIVITY STATUS OVERRIDE MODAL ---------------- */
-let statusOverrideModalKey = null;
-function openActivityStatusModal(catKey, subCat, activity){
-  statusOverrideModalKey = activityOverrideKey(catKey, subCat, activity);
+/* ---------------- GENERIC SELECT MODAL (status override, move-to-group, etc.) ---------------- */
+let selectModalOnConfirm = null;
+function openSelectModal(title, labelText, optionsHtml, currentValue, onConfirm){
+  document.getElementById('statusOverrideModalTitle').textContent = title;
+  document.getElementById('statusOverrideModalLabel').textContent = labelText;
   const select = document.getElementById('statusOverrideModalSelect');
-  select.innerHTML = '<option value="">Auto (from tasks)</option>' +
-    Object.keys(STATUS_CLASS).map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
-  select.value = state.activityStatusOverride[statusOverrideModalKey] || '';
-  document.getElementById('statusOverrideModalLabel').textContent = 'Status for "'+activity+'"';
+  select.innerHTML = optionsHtml;
+  select.value = currentValue || '';
+  selectModalOnConfirm = onConfirm;
   document.getElementById('statusOverrideModalOverlay').classList.add('open');
 }
-function closeActivityStatusModal(){
+function closeSelectModal(){
   document.getElementById('statusOverrideModalOverlay').classList.remove('open');
-  statusOverrideModalKey = null;
+  selectModalOnConfirm = null;
 }
-function confirmActivityStatusModal(){
+function confirmSelectModal(){
   const value = document.getElementById('statusOverrideModalSelect').value;
-  const key = statusOverrideModalKey;
-  closeActivityStatusModal();
-  if(!key) return;
-  if(value){ state.activityStatusOverride[key] = value; } else { delete state.activityStatusOverride[key]; }
-  persistAndSyncOverrides();
-  renderCategoryView();
-  toast(value ? 'Activity status set to "'+value+'"' : 'Activity status set back to Auto');
+  const cb = selectModalOnConfirm;
+  closeSelectModal();
+  if(cb) cb(value);
+}
+
+function openActivityStatusModal(catKey, subCat, activity){
+  const key = activityOverrideKey(catKey, subCat, activity);
+  const optionsHtml = '<option value="">Auto (from tasks)</option>' +
+    Object.keys(STATUS_CLASS).map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+  openSelectModal('Set Activity Status', 'Status for "'+activity+'"', optionsHtml, state.activityStatusOverride[key] || '', (value)=>{
+    if(value){ state.activityStatusOverride[key] = value; } else { delete state.activityStatusOverride[key]; }
+    persistAndSyncOverrides();
+    renderCategoryView();
+    toast(value ? 'Activity status set to "'+value+'"' : 'Activity status set back to Auto');
+  });
+}
+
+function openMoveSubCatModal(catKey, subCat){
+  const groups = groupOrderForCategory(catKey);
+  const optionsHtml = [...groups, UNGROUPED_LABEL].map(g=>`<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+  openSelectModal('Move Sub-Category', 'Move "'+subCat+'" to group', optionsHtml, groupOfSubCategory(catKey, subCat), (value)=>{
+    if(!value) return;
+    const bucket = ensureGroupBucket(catKey);
+    bucket.of[subCat] = value;
+    if(!bucket.order.includes(value) && value!==UNGROUPED_LABEL) bucket.order.push(value);
+    persistAndSyncGroups();
+    if(state.view.category===catKey && state.view.subCategory===subCat) state.view.subCategoryGroup = value;
+    renderAll();
+    toast('"'+subCat+'" moved to "'+value+'"');
+  });
 }
 
 /* ---------------- CATEGORY DRILL-DOWN ---------------- */
@@ -3281,7 +3224,9 @@ function renderCategoryView(){
   const body = document.getElementById('catBody');
   const filterRow = document.getElementById('catStatusFilter');
   const reorderBtn = document.getElementById('btnReorderCards');
+  const addBtn = document.getElementById('btnAddGroupOrSubCat');
   reorderBtn.style.display = 'none';
+  addBtn.style.display = 'none';
   const hasGroups = groupOrderForCategory(state.view.category).length > 0;
   if(!hasGroups) state.view.subCategoryGroup = null;
 
@@ -3298,16 +3243,26 @@ function renderCategoryView(){
 
   if(hasGroups && !state.view.subCategoryGroup){
     filterRow.innerHTML = '';
-    const allSubs = Object.keys(hier);
+    addBtn.style.display = '';
+    addBtn.textContent = '+ Add Group';
+    addBtn.onclick = ()=> openRenameModal('Add Group', '', (name)=>{
+      if(addGroupNamed(state.view.category, name)) renderCategoryView();
+    }, {labelText:'Group name', confirmText:'Add', placeholder:'e.g. Compendiums'});
+    const allSubs = state.subCategories[state.view.category] || [];
     const groups = groupTilesForCategory(state.view.category, allSubs);
-    if(!groups.length){ body.innerHTML = emptyHtml('No tasks recorded yet for this workstream.'); return; }
+    if(!groups.length){ body.innerHTML = emptyHtml('No groups yet — use "+ Add Group" above to create one.'); return; }
     body.innerHTML = `<div class="card-grid">` + groups.map(g=>{
       const subsInG = subCatsInGroup(state.view.category, allSubs, g);
-      const allTasks = subsInG.flatMap(sc=> Object.values(hier[sc]).flat());
+      const allTasks = subsInG.flatMap(sc=> Object.values(hier[sc]||{}).flat());
+      const isUngrouped = g === UNGROUPED_LABEL;
       return `<div class="entity-card" data-group="${escapeHtml(g)}">
         <div class="entity-card-top">
           <div><h3>${escapeHtml(g)}</h3><div class="meta">${subsInG.length} sub-categor${subsInG.length===1?'y':'ies'}</div></div>
-          <div class="entity-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg></div>
+          ${isUngrouped ? `<div class="entity-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg></div>` : `
+          <div style="display:flex; gap:4px;">
+            <span class="icon-btn grp-edit-btn" data-group="${escapeHtml(g)}" title="Rename group"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.4-9.4a2 2 0 112.8 2.8L11 15l-4 1 1-4z"/></svg></span>
+            <span class="icon-btn danger grp-del-btn" data-group="${escapeHtml(g)}" title="${subsInG.length>0?'Move its sub-categories out first':'Delete group'}"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg></span>
+          </div>`}
         </div>
         <div class="progress-track"><div class="progress-fill" style="width:${progressPct(allTasks)}%"></div></div>
         <div class="entity-stats"><span><b>${allTasks.length}</b> tasks</span><span><b>${progressPct(allTasks)}%</b> done</span></div>
@@ -3316,15 +3271,26 @@ function renderCategoryView(){
     document.querySelectorAll('#catBody [data-group]').forEach(el=>{
       el.addEventListener('click', ()=>{ state.view.subCategoryGroup = el.dataset.group; renderCategoryView(); });
     });
+    document.querySelectorAll('#catBody .grp-edit-btn').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{ e.stopPropagation(); renameGroup(state.view.category, btn.dataset.group); });
+    });
+    document.querySelectorAll('#catBody .grp-del-btn').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{ e.stopPropagation(); deleteGroup(state.view.category, btn.dataset.group); });
+    });
     return;
   }
 
   if(!state.view.subCategory){
     filterRow.innerHTML = '';
+    addBtn.style.display = '';
+    addBtn.textContent = '+ Add Sub-Category';
+    addBtn.onclick = ()=> openRenameModal('Add Sub-Category', '', (name)=>{
+      if(addSubCatNamed(state.view.category, name, hasGroups ? state.view.subCategoryGroup : null)) renderCategoryView();
+    }, {labelText:'Sub-category name', confirmText:'Add', placeholder:'e.g. Workshops'});
     const allSubs = Object.keys(hier);
     const scopedSubs = hasGroups ? subCatsInGroup(state.view.category, allSubs, state.view.subCategoryGroup) : allSubs;
     const subs = applyCustomOrder(scopedSubs, state.subCategoryOrder[state.view.category]);
-    if(!subs.length){ body.innerHTML = emptyHtml('No tasks recorded yet for this group.'); return; }
+    if(!subs.length){ body.innerHTML = emptyHtml('No sub-categories yet — use "+ Add Sub-Category" above to create one.'); return; }
     if(subs.length>1){
       reorderBtn.style.display = '';
       reorderBtn.onclick = ()=> openReorderModal('Reorder Sub-Categories', subs, (newOrder)=>{
@@ -3335,12 +3301,16 @@ function renderCategoryView(){
       });
     }
     body.innerHTML = `<div class="card-grid">` + subs.map(sc=>{
-      const allTasks = Object.values(hier[sc]).flat();
-      const nActs = Object.keys(hier[sc]).length;
+      const allTasks = Object.values(hier[sc]||{}).flat();
+      const nActs = Object.keys(hier[sc]||{}).length;
       return `<div class="entity-card" data-sub="${escapeHtml(sc)}">
         <div class="entity-card-top">
           <div><h3>${escapeHtml(sc)}</h3><div class="meta">${nActs} ${nActs===1?'activity':'activities'}</div></div>
-          <div class="entity-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg></div>
+          <div style="display:flex; gap:4px;">
+            ${hasGroups ? `<span class="icon-btn sc-move-btn" data-sub="${escapeHtml(sc)}" title="Move to another group"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg></span>` : ''}
+            <span class="icon-btn sc-edit-btn" data-sub="${escapeHtml(sc)}" title="Rename sub-category"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.4-9.4a2 2 0 112.8 2.8L11 15l-4 1 1-4z"/></svg></span>
+            <span class="icon-btn danger sc-del-btn" data-sub="${escapeHtml(sc)}" title="${allTasks.length>0?'Still in use':'Delete sub-category'}"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg></span>
+          </div>
         </div>
         <div class="progress-track"><div class="progress-fill" style="width:${progressPct(allTasks)}%"></div></div>
         <div class="entity-stats"><span><b>${allTasks.length}</b> tasks</span><span><b>${progressPct(allTasks)}%</b> done</span></div>
@@ -3348,6 +3318,15 @@ function renderCategoryView(){
     }).join('') + `</div>`;
     document.querySelectorAll('#catBody [data-sub]').forEach(el=>{
       el.addEventListener('click', ()=>{ state.view.subCategory = el.dataset.sub; renderCategoryView(); });
+    });
+    document.querySelectorAll('#catBody .sc-edit-btn').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{ e.stopPropagation(); renameSubCat(state.view.category, btn.dataset.sub); });
+    });
+    document.querySelectorAll('#catBody .sc-del-btn').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{ e.stopPropagation(); deleteSubCat(state.view.category, btn.dataset.sub); });
+    });
+    document.querySelectorAll('#catBody .sc-move-btn').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{ e.stopPropagation(); openMoveSubCatModal(state.view.category, btn.dataset.sub); });
     });
     return;
   }
@@ -4177,20 +4156,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('newCategoryInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') addCategory(); });
   document.getElementById('btnAddTaskType').addEventListener('click', addTaskType);
   document.getElementById('newTaskTypeInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') addTaskType(); });
-  document.getElementById('btnAddSubCat').addEventListener('click', addSubCat);
-  document.getElementById('newSubCatInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') addSubCat(); });
-  document.getElementById('subCatManageCategory').addEventListener('change', (e)=>{
-    document.getElementById('groupManageCategory').value = e.target.value;
-    renderSubCatManage();
-    renderGroupManage();
-  });
-  document.getElementById('groupManageCategory').addEventListener('change', (e)=>{
-    document.getElementById('subCatManageCategory').value = e.target.value;
-    renderGroupManage();
-    renderSubCatManage();
-  });
-  document.getElementById('btnAddGroup').addEventListener('click', addGroup);
-  document.getElementById('newGroupInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') addGroup(); });
   document.getElementById('btnAddTeamMember').addEventListener('click', addTeamMember);
   document.getElementById('newTeamMemberInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') addTeamMember(); });
 
@@ -4209,10 +4174,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('btnApplyReorderModal').addEventListener('click', applyReorderModal);
   document.getElementById('reorderModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='reorderModalOverlay') closeReorderModal(); });
 
-  document.getElementById('statusOverrideModalClose').addEventListener('click', closeActivityStatusModal);
-  document.getElementById('btnCancelStatusOverrideModal').addEventListener('click', closeActivityStatusModal);
-  document.getElementById('btnConfirmStatusOverrideModal').addEventListener('click', confirmActivityStatusModal);
-  document.getElementById('statusOverrideModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='statusOverrideModalOverlay') closeActivityStatusModal(); });
+  document.getElementById('statusOverrideModalClose').addEventListener('click', closeSelectModal);
+  document.getElementById('btnCancelStatusOverrideModal').addEventListener('click', closeSelectModal);
+  document.getElementById('btnConfirmStatusOverrideModal').addEventListener('click', confirmSelectModal);
+  document.getElementById('statusOverrideModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='statusOverrideModalOverlay') closeSelectModal(); });
   document.querySelectorAll('.fs-tabs .chip').forEach(chip=>{
     chip.addEventListener('click', ()=>{
       state.formstackTab = chip.dataset.fstab;
