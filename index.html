@@ -97,11 +97,13 @@ a, button, .btn, .nav-item, .chip, .icon-btn, .entity-card, .kpi-card, .ring-car
 .nav-item.active .count{background:rgba(124,58,237,0.14); color:var(--violet);}
 
 .sub-nav{margin-top:2px; padding-left:8px; border-left:1px solid var(--border); margin-left:22px; margin-bottom:6px;
-  max-height:600px; overflow:hidden; opacity:1; transition:max-height .25s ease, opacity .2s ease, margin .2s ease;}
+  max-height:4000px; overflow:hidden; opacity:1; transition:max-height .25s ease, opacity .2s ease, margin .2s ease;}
 .sub-nav.collapsed{max-height:0; opacity:0; margin-top:0; margin-bottom:0; border-color:transparent;}
 .sub-nav .nav-item{font-size:12.5px; padding:7px 10px;}
-.sub-nav-group-label{font-size:10px; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-faint); padding:10px 10px 3px; }
+.sub-nav-group-label{font-size:10px; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-faint); padding:10px 10px 3px; cursor:pointer; border-radius:6px;}
 .sub-nav-group-label:first-child{padding-top:4px;}
+.sub-nav-group-label:hover{color:var(--text-dim); background:var(--panel-2);}
+.sub-nav-group-label.active{color:var(--violet);}
 .nav-item.grouped-sub{padding-left:18px;}
 .cat-chevron{width:14px; height:14px; flex-shrink:0; transition:transform .2s ease; opacity:.6;}
 .cat-chevron.expanded{transform:rotate(90deg);}
@@ -2237,6 +2239,12 @@ function fmtDate(d){
   if(isNaN(dt)) return d;
   return dt.toLocaleDateString('en-GB', {day:'2-digit', month:'short'});
 }
+function fmtDateWithYear(d){
+  if(!d) return '—';
+  const dt = new Date(d);
+  if(isNaN(dt)) return d;
+  return dt.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+}
 function badgeHtml(status){
   const cls = STATUS_CLASS[status] || 'badge-notstarted';
   return `<span class="badge ${cls}">${escapeHtml(status||'Not Started')}</span>`;
@@ -2348,7 +2356,9 @@ function switchView(view, opts){
     state.view.category = (opts&&opts.category) || state.view.category || 'IWG';
     state.view.subCategory = (opts&&opts.subCategory) || null;
     state.view.activity = (opts&&opts.activity) || null;
-    state.view.subCategoryGroup = state.view.subCategory ? groupOfSubCategory(state.view.category, state.view.subCategory) : null;
+    state.view.subCategoryGroup = state.view.subCategory
+      ? groupOfSubCategory(state.view.category, state.view.subCategory)
+      : ((opts&&opts.subCategoryGroup) || null);
     state.view.statusFilter = null;
     state.view.taskTypeFilter = null;
     state.expandedCat = state.view.category;
@@ -2406,9 +2416,10 @@ function renderCategoryNav(){
       </div>`;
     };
     const subNav = hasGroups
-      ? groupTilesForCategory(cat.key, subs).map(g=>
-          `<div class="sub-nav-group-label">${escapeHtml(g)}</div>` + subCatsInGroup(cat.key, subs, g).map(subNavItem).join('')
-        ).join('')
+      ? groupTilesForCategory(cat.key, subs).map(g=>{
+          const groupActive = state.view.category===cat.key && !state.view.subCategory && state.view.subCategoryGroup===g;
+          return `<div class="sub-nav-group-label ${groupActive?'active':''}" data-cat="${escapeHtml(cat.key)}" data-group="${escapeHtml(g)}">${escapeHtml(g)}</div>` + subCatsInGroup(cat.key, subs, g).map(subNavItem).join('');
+        }).join('')
       : subs.map(subNavItem).join('');
     const catActive = state.view.category===cat.key && !state.view.subCategory;
     return `
@@ -2436,6 +2447,9 @@ function renderCategoryNav(){
   });
   container.querySelectorAll('.sub-nav .nav-item[data-subcat]').forEach(el=>{
     el.addEventListener('click', ()=> switchView('category', {category: el.dataset.cat, subCategory: el.dataset.subcat}));
+  });
+  container.querySelectorAll('.sub-nav-group-label[data-group]').forEach(el=>{
+    el.addEventListener('click', ()=> switchView('category', {category: el.dataset.cat, subCategoryGroup: el.dataset.group}));
   });
 
   document.getElementById('navCountCancelled').textContent = state.tasks.filter(t=>t.status==='Cancelled').length;
@@ -3442,8 +3456,8 @@ function taskDetailHtml(t){
     detailField('Status', t.status),
     detailField('Status Comment', t.statusComment),
     detailField('Comments', t.comments, 'wide'),
-    detailField('Due Date', fmtDate(t.date)),
-    detailField('Completion Date', fmtDate(t.completionDate)),
+    detailField('Due Date', fmtDateWithYear(t.date)),
+    detailField('Completion Date', fmtDateWithYear(t.completionDate)),
     detailField('Revised Date', t.revisedDate),
     detailField('Delay', isDelayed(t) ? (delayDays(t) + ' day' + (delayDays(t)===1?'':'s') + ' late') : ''),
     detailField('Hours Spent', t.hoursSpent),
