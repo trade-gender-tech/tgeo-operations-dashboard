@@ -30687,6 +30687,11 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
 
 /* ---------- NOTES / TODO ---------- */
 .todo-item{display:flex; align-items:center; gap:12px; padding:12px 14px; background:var(--panel-2); border-radius:10px; margin-bottom:8px;}
+.tododoc-card{background:var(--panel-2); border-radius:10px; margin-bottom:8px; overflow:hidden;}
+.tododoc-head{display:flex; align-items:center; gap:10px; padding:10px 14px;}
+.tododoc-name{flex:1; font-size:13.5px; font-weight:700;}
+.tododoc-preview-wrap{border-top:1px solid var(--border);}
+.tododoc-preview-wrap iframe{width:100%; height:560px; border:none; display:block;}
 .manage-row{display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--panel-2); border-radius:10px; margin-bottom:8px;}
 .manage-row .mr-icon{width:24px; height:24px; border-radius:7px; flex-shrink:0;}
 .manage-row .mr-label{flex:1; font-size:13.5px; font-weight:700;}
@@ -31015,6 +31020,13 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
           </div>
           <div id="todoList"></div>
         </div>
+        <div class="panel">
+          <div class="panel-head">
+            <div><h2>Linked Documents</h2><div class="desc">Google Docs to-do lists or trackers someone already keeps elsewhere — embedded here, filtered by the workstream above</div></div>
+            <button class="btn btn-primary btn-sm" id="btnAddTodoDoc">+ Add Document</button>
+          </div>
+          <div id="todoDocList"></div>
+        </div>
       </div>
 
       <!-- NOTES -->
@@ -31297,6 +31309,27 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
     <div class="modal-foot">
       <button class="btn" id="btnCancelRenameModal">Cancel</button>
       <button class="btn btn-primary" id="btnConfirmRenameModal">Rename</button>
+    </div>
+  </div>
+</div>
+
+<!-- LINKED DOCUMENT MODAL (Google Docs to-do lists etc.) -->
+<div class="modal-overlay" id="todoDocModalOverlay">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-head">
+      <h3>Add Linked Document</h3>
+      <div class="modal-close" id="todoDocModalClose">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="form-row"><label>Name</label><input type="text" id="todoDocNameInput" placeholder="e.g. Cristina's To-Do List"></div>
+      <div class="form-row"><label>Google Doc link</label><input type="text" id="todoDocLinkInput" placeholder="Paste the Google Docs share link"></div>
+      <div style="color:var(--text-faint); font-size:12px; margin-top:-6px;">The doc must be shared so anyone with the link can view it.</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="btnCancelTodoDocModal">Cancel</button>
+      <button class="btn btn-primary" id="btnConfirmTodoDocModal">Add</button>
     </div>
   </div>
 </div>
@@ -31634,6 +31667,7 @@ function loadState(){
     state.activityStatusOverride = {};
   }
   if(!state.todoCategory) state.todoCategory = state.categories[0].key;
+  if(!Array.isArray(state.todoDocs)) state.todoDocs = [];
   if(!state.calendarDefaultTypes || !state.calendarDefaultTypes.length) state.calendarDefaultTypes = ['Meeting/Event'];
   if(!state.calendarVisibleTypes || !state.calendarVisibleTypes.length) state.calendarVisibleTypes = state.calendarDefaultTypes.slice();
   if(!Array.isArray(state.holidays)) state.holidays = DEFAULT_HOLIDAYS.slice();
@@ -31738,6 +31772,14 @@ function applySheetConfig(config){
     }catch(e){}
   }
   if(!appliedOverrides && Object.keys(state.activityStatusOverride).length) pushConfigToSheet('activityStatusOverrides', state.activityStatusOverride);
+  let appliedTodoDocs = false;
+  if(config && config.todoDocs){
+    try{
+      const parsed = JSON.parse(config.todoDocs);
+      if(Array.isArray(parsed)){ state.todoDocs = parsed; appliedTodoDocs = true; }
+    }catch(e){}
+  }
+  if(!appliedTodoDocs && state.todoDocs.length) pushConfigToSheet('todoDocs', state.todoDocs);
 }
 function syncTasksToSheet(tasks){
   if(!sheetsConnected() || !tasks.length) return;
@@ -32548,6 +32590,10 @@ function persistAndSyncGroups(){
 function persistAndSyncOverrides(){
   persistLocal();
   pushConfigToSheet('activityStatusOverrides', state.activityStatusOverride);
+}
+function persistAndSyncTodoDocs(){
+  persistLocal();
+  pushConfigToSheet('todoDocs', state.todoDocs);
 }
 function delayDays(t){
   if(t.status!=='Done' || !t.completionDate || !t.date) return 0;
@@ -33817,6 +33863,8 @@ function renderTodos(){
 
   populateAssigneeSelect(document.getElementById('todoAssignedPerson'), '');
 
+  renderTodoDocs();
+
   const list = document.getElementById('todoList');
   const todos = state.todos.filter(t=>t.category===state.todoCategory);
   if(!todos.length){ list.innerHTML = emptyHtml('No to-do items yet for this workstream.'); return; }
@@ -33836,6 +33884,68 @@ function renderTodos(){
       state.todos = state.todos.filter(x=>x.id!==id); persistLocal(); renderTodos();
     });
   });
+}
+let todoDocExpanded = new Set();
+function extractGoogleDocId(input){
+  const trimmed = (input||'').trim();
+  const m = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if(m) return m[1];
+  if(/^[a-zA-Z0-9_-]{10,}$/.test(trimmed)) return trimmed;
+  return null;
+}
+function renderTodoDocs(){
+  const list = document.getElementById('todoDocList');
+  const docs = state.todoDocs.filter(d=>d.category===state.todoCategory);
+  if(!docs.length){ list.innerHTML = emptyHtml('No linked documents yet for this workstream.'); return; }
+  list.innerHTML = docs.map(d=>{
+    const expanded = todoDocExpanded.has(d.id);
+    return `
+    <div class="tododoc-card" data-id="${d.id}">
+      <div class="tododoc-head">
+        <span class="icon-btn expand-btn tododoc-toggle-btn ${expanded?'expanded':''}" title="Show/hide preview"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></span>
+        <div class="tododoc-name">${escapeHtml(d.name)}</div>
+        <a class="icon-btn" href="https://docs.google.com/document/d/${encodeURIComponent(d.docId)}/edit" target="_blank" rel="noopener" title="Open in Google Docs"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg></a>
+        <span class="icon-btn danger tododoc-del-btn" title="Remove"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg></span>
+      </div>
+      <div class="tododoc-preview-wrap" style="${expanded?'':'display:none;'}">
+        <iframe src="https://docs.google.com/document/d/${encodeURIComponent(d.docId)}/preview" loading="lazy"></iframe>
+      </div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.tododoc-card').forEach(el=>{
+    const id = el.dataset.id;
+    el.querySelector('.tododoc-toggle-btn').addEventListener('click', ()=>{
+      if(todoDocExpanded.has(id)) todoDocExpanded.delete(id); else todoDocExpanded.add(id);
+      renderTodoDocs();
+    });
+    el.querySelector('.tododoc-del-btn').addEventListener('click', ()=>{
+      if(!confirm('Remove this linked document? The underlying Google Doc is not affected.')) return;
+      state.todoDocs = state.todoDocs.filter(x=>x.id!==id);
+      persistAndSyncTodoDocs();
+      renderTodoDocs();
+    });
+  });
+}
+function openTodoDocModal(){
+  document.getElementById('todoDocNameInput').value = '';
+  document.getElementById('todoDocLinkInput').value = '';
+  document.getElementById('todoDocModalOverlay').classList.add('open');
+  setTimeout(()=>{ document.getElementById('todoDocNameInput').focus(); }, 30);
+}
+function closeTodoDocModal(){
+  document.getElementById('todoDocModalOverlay').classList.remove('open');
+}
+function confirmAddTodoDoc(){
+  const name = document.getElementById('todoDocNameInput').value.trim();
+  const link = document.getElementById('todoDocLinkInput').value.trim();
+  if(!name){ toast('Enter a name for the document', 'error'); return; }
+  const docId = extractGoogleDocId(link);
+  if(!docId){ toast('That doesn\'t look like a valid Google Docs link', 'error'); return; }
+  state.todoDocs.push({ id: uid('TD'), name, category: state.todoCategory, docId });
+  persistAndSyncTodoDocs();
+  closeTodoDocModal();
+  renderTodoDocs();
+  toast('Document linked');
 }
 
 /* ---------------- NOTES ---------------- */
@@ -34640,6 +34750,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('btnConfirmRenameModal').addEventListener('click', confirmRenameModal);
   document.getElementById('renameModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='renameModalOverlay') closeRenameModal(); });
   document.getElementById('renameModalInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') confirmRenameModal(); });
+  document.getElementById('btnAddTodoDoc').addEventListener('click', openTodoDocModal);
+  document.getElementById('todoDocModalClose').addEventListener('click', closeTodoDocModal);
+  document.getElementById('btnCancelTodoDocModal').addEventListener('click', closeTodoDocModal);
+  document.getElementById('btnConfirmTodoDocModal').addEventListener('click', confirmAddTodoDoc);
+  document.getElementById('todoDocModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='todoDocModalOverlay') closeTodoDocModal(); });
+  document.getElementById('todoDocLinkInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') confirmAddTodoDoc(); });
   document.getElementById('reorderModalClose').addEventListener('click', closeReorderModal);
   document.getElementById('btnCancelReorderModal').addEventListener('click', closeReorderModal);
   document.getElementById('btnApplyReorderModal').addEventListener('click', applyReorderModal);
