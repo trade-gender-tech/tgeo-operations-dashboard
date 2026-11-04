@@ -34494,7 +34494,7 @@ async function buildExportDocx(tasks, includeNotes, includeAssigned){
   if(includeAssigned) headers.push('Assigned');
   if(includeNotes) headers.push('Notes');
 
-  const narrowPct = {workstream:4, group:4, sub:5, activity:6};
+  const narrowPct = {workstream:4, group:4, sub:5, activity:14};
   const dueDatePct = 9, statusPct = 7, assignedPct = includeAssigned ? 8 : 0;
   const fixedPct = narrowPct.workstream + narrowPct.group + narrowPct.sub + narrowPct.activity + dueDatePct + statusPct + assignedPct;
   const remainingPct = 100 - fixedPct;
@@ -34536,7 +34536,7 @@ async function buildExportDocx(tasks, includeNotes, includeAssigned){
       textCell(sameCat?'':cat.label, {merge: sameCat?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART, fill: sameCat?undefined:catColor, bold:true, color: sameCat?undefined:'FFFFFF', widthPct: narrowPct.workstream, vertical:true}),
       textCell(sameGroup?'':group, {merge: sameGroup?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART, widthPct: narrowPct.group, vertical:true}),
       textCell(sameSub?'':(t.subCategory||''), {merge: sameSub?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART, widthPct: narrowPct.sub, vertical:true}),
-      textCell(sameAct?'':(t.activity||''), {merge: sameAct?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART, widthPct: narrowPct.activity, vertical:true}),
+      textCell(sameAct?'':(t.activity||''), {merge: sameAct?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART, widthPct: narrowPct.activity}),
       textCell(t.description||'', {widthPct: taskPct}),
       textCell(fmtDateWithYear(t.date), {widthPct: dueDatePct}),
       textCell(t.status||'', {widthPct: statusPct}),
