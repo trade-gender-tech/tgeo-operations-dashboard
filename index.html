@@ -6,6 +6,7 @@
 <title>TGEO Operations Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@9.15.2/dist/index.umd.cjs"></script>
 <style>
 :root{
   color-scheme: light;
@@ -369,6 +370,15 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
 .dropdown-check-divider{height:1px; background:var(--border); margin:6px 0;}
 .dropdown-check-action{font-size:11.5px; font-weight:700; color:var(--violet); cursor:pointer; padding:7px 8px; border-radius:8px;}
 .dropdown-check-action:hover{background:var(--violet-pale);}
+.export-filters-row{display:flex; flex-wrap:wrap; align-items:center; gap:14px; margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--border);}
+.export-toggle{display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:600; color:var(--text); cursor:pointer;}
+.export-toggle input{cursor:pointer;}
+.export-summary-row{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;}
+.export-summary-text{font-size:12.5px; font-weight:700; color:var(--text-dim);}
+.export-quick-action{font-size:11.5px; font-weight:700; color:var(--violet); cursor:pointer;}
+.export-quick-action:hover{text-decoration:underline;}
+.export-row-excluded{opacity:0.4;}
+.export-ws-swatch{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; flex-shrink:0;}
 .cal-type-filter-label{font-size:11.5px; font-weight:700; color:var(--text-dim); flex-shrink:0; width:84px;}
 .cal-split{display:flex; gap:24px; align-items:flex-start;}
 .cal-left{flex:1.4 1 0; min-width:0;}
@@ -739,6 +749,10 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
           <div class="panel">
             <div class="panel-head">
               <div><h2>Upcoming &amp; Overdue</h2><div class="desc">Overdue tasks and anything due in the next 7 days, in order</div></div>
+              <button class="btn btn-sm" id="btnOpenExportTasks" title="Export upcoming tasks to a Word document">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v4a2 2 0 002 2h12a2 2 0 002-2v-4"/></svg>
+                Export to Word
+              </button>
             </div>
             <div class="timeline-list" id="upcomingList"></div>
           </div>
@@ -1174,6 +1188,57 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
     <div class="modal-foot">
       <button class="btn" id="btnCancelStatusOverrideModal">Cancel</button>
       <button class="btn btn-primary" id="btnConfirmStatusOverrideModal">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT TASKS TO WORD MODAL -->
+<div class="modal-overlay" id="exportTasksModalOverlay">
+  <div class="modal" style="max-width:980px;">
+    <div class="modal-head">
+      <h3>Export Upcoming Tasks to Word</h3>
+      <div class="modal-close" id="exportTasksModalClose">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="export-filters-row">
+        <label class="export-toggle"><input type="checkbox" id="exportIncludeOverdue"> Include overdue tasks</label>
+        <label class="export-toggle"><input type="checkbox" id="exportIncludeNotes" checked> Include Notes column</label>
+        <div class="dropdown-check" id="exportTypeDropdown">
+          <button type="button" class="dropdown-check-btn" id="exportTypeDropdownBtn">All Task Types</button>
+          <div class="dropdown-check-panel" id="exportTypeDropdownPanel"></div>
+        </div>
+        <div class="dropdown-check" id="exportCatDropdown">
+          <button type="button" class="dropdown-check-btn" id="exportCatDropdownBtn">All Workstreams</button>
+          <div class="dropdown-check-panel" id="exportCatDropdownPanel"></div>
+        </div>
+        <div class="dropdown-check" id="exportGroupDropdown">
+          <button type="button" class="dropdown-check-btn" id="exportGroupDropdownBtn">All Groups</button>
+          <div class="dropdown-check-panel" id="exportGroupDropdownPanel"></div>
+        </div>
+        <div class="dropdown-check" id="exportSubCatDropdown">
+          <button type="button" class="dropdown-check-btn" id="exportSubCatDropdownBtn">All Sub-Categories</button>
+          <div class="dropdown-check-panel" id="exportSubCatDropdownPanel"></div>
+        </div>
+      </div>
+      <div class="export-summary-row">
+        <div class="export-summary-text" id="exportSummaryText">0 of 0 tasks selected</div>
+        <div style="display:flex; gap:8px;">
+          <span class="export-quick-action" id="exportSelectAllBtn">Select All</span>
+          <span class="export-quick-action" id="exportDeselectAllBtn">Deselect All</span>
+        </div>
+      </div>
+      <div class="table-wrap" style="max-height:44vh; overflow-y:auto;">
+        <table>
+          <thead id="exportPreviewHead"></thead>
+          <tbody id="exportPreviewBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="btnCancelExportTasks">Cancel</button>
+      <button class="btn btn-primary" id="btnConfirmExportTasks">Export to Word</button>
     </div>
   </div>
 </div>
@@ -3976,6 +4041,206 @@ function saveExcelScoped(tasks, categoryKey){
   });
 }
 
+/* ---------------- EXPORT UPCOMING TASKS TO WORD ---------------- */
+let exportState = { includeOverdue:false, includeNotes:true, taskTypes:[], workstreams:[], groups:[], subCats:[], deselected:new Set() };
+
+function exportCandidatePool(){
+  return state.tasks.filter(t=>{
+    if(t.status==='Done' || t.status==='Cancelled') return false;
+    if(!t.date) return false;
+    const diff = daysFromToday(t.date);
+    if(diff===null) return false;
+    if(diff>=0) return true;
+    return exportState.includeOverdue;
+  });
+}
+function exportFilteredTasks(){
+  return exportCandidatePool().filter(t=>{
+    if(exportState.taskTypes.length && !exportState.taskTypes.includes(t.taskType)) return false;
+    if(exportState.workstreams.length && !exportState.workstreams.includes(t.category)) return false;
+    if(exportState.groups.length && !exportState.groups.includes(groupOfSubCategory(t.category, t.subCategory))) return false;
+    if(exportState.subCats.length && !exportState.subCats.includes(t.subCategory)) return false;
+    return true;
+  });
+}
+function exportSortedTasks(){
+  const catOrder = state.categories.map(c=>c.key);
+  return exportFilteredTasks().slice().sort((a,b)=>{
+    const ai = catOrder.indexOf(a.category), bi = catOrder.indexOf(b.category);
+    if(ai !== bi) return ai - bi;
+    const ga = groupOfSubCategory(a.category, a.subCategory), gb = groupOfSubCategory(b.category, b.subCategory);
+    if(ga !== gb){
+      const gOrder = groupOrderForCategory(a.category);
+      let gai = gOrder.indexOf(ga); if(gai===-1) gai = 999;
+      let gbi = gOrder.indexOf(gb); if(gbi===-1) gbi = 999;
+      if(gai !== gbi) return gai - gbi;
+      return ga.localeCompare(gb);
+    }
+    if(a.subCategory !== b.subCategory) return (a.subCategory||'').localeCompare(b.subCategory||'');
+    if((a.activity||'') !== (b.activity||'')) return (a.activity||'').localeCompare(b.activity||'');
+    return new Date(a.date||'2100-01-01') - new Date(b.date||'2100-01-01');
+  });
+}
+function exportSelectedTasks(){
+  return exportSortedTasks().filter(t=> !exportState.deselected.has(t.id));
+}
+
+function openExportTasksModal(){
+  exportState = { includeOverdue:false, includeNotes:true, taskTypes:[], workstreams:[], groups:[], subCats:[], deselected:new Set() };
+  document.getElementById('exportIncludeOverdue').checked = false;
+  document.getElementById('exportIncludeNotes').checked = true;
+  refreshExportModal();
+  document.getElementById('exportTasksModalOverlay').classList.add('open');
+}
+function closeExportTasksModal(){
+  document.getElementById('exportTasksModalOverlay').classList.remove('open');
+}
+function refreshExportModal(){
+  renderExportFilters();
+  renderExportPreview();
+}
+function exportDropdownFilter(id, btnLabel, allLabel, options, selected, onToggle){
+  const btn = document.getElementById(id+'Btn');
+  btn.textContent = selected.length===0 ? allLabel : selected.length+' Selected';
+  const panel = document.getElementById(id+'Panel');
+  panel.innerHTML = `<div class="dropdown-check-action" data-clear="1">${allLabel}</div><div class="dropdown-check-divider"></div>` +
+    options.map(opt=>`<label class="dropdown-check-row"><input type="checkbox" data-val="${escapeHtml(opt)}" ${selected.includes(opt)?'checked':''}> ${escapeHtml(opt)}</label>`).join('');
+  panel.querySelector('[data-clear]').addEventListener('click', ()=>{ onToggle(null); refreshExportModal(); });
+  panel.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{ onToggle(cb.dataset.val, cb.checked); refreshExportModal(); });
+  });
+}
+function renderExportFilters(){
+  const pool = exportCandidatePool();
+  const taskTypeOpts = [...new Set(pool.map(t=>t.taskType).filter(Boolean))].sort();
+  const catOpts = state.categories.map(c=>c.key).filter(k=> pool.some(t=>t.category===k));
+  const groupOpts = [...new Set(pool.map(t=>groupOfSubCategory(t.category, t.subCategory)))].sort();
+  const subCatOpts = [...new Set(pool.map(t=>t.subCategory).filter(Boolean))].sort();
+
+  exportDropdownFilter('exportTypeDropdown', 'Task Type', 'All Task Types', taskTypeOpts, exportState.taskTypes, (val, checked)=>{
+    if(val===null){ exportState.taskTypes = []; return; }
+    exportState.taskTypes = checked ? [...exportState.taskTypes, val] : exportState.taskTypes.filter(x=>x!==val);
+  });
+  exportDropdownFilter('exportCatDropdown', 'Workstream', 'All Workstreams', catOpts.map(k=>catMeta(k).label), exportState.workstreams.map(k=>catMeta(k).label), (val, checked)=>{
+    if(val===null){ exportState.workstreams = []; return; }
+    const key = state.categories.find(c=>c.label===val).key;
+    exportState.workstreams = checked ? [...exportState.workstreams, key] : exportState.workstreams.filter(x=>x!==key);
+  });
+  exportDropdownFilter('exportGroupDropdown', 'Group', 'All Groups', groupOpts, exportState.groups, (val, checked)=>{
+    if(val===null){ exportState.groups = []; return; }
+    exportState.groups = checked ? [...exportState.groups, val] : exportState.groups.filter(x=>x!==val);
+  });
+  exportDropdownFilter('exportSubCatDropdown', 'Sub-Category', 'All Sub-Categories', subCatOpts, exportState.subCats, (val, checked)=>{
+    if(val===null){ exportState.subCats = []; return; }
+    exportState.subCats = checked ? [...exportState.subCats, val] : exportState.subCats.filter(x=>x!==val);
+  });
+}
+function renderExportPreview(){
+  const sorted = exportSortedTasks();
+  const includeNotes = document.getElementById('exportIncludeNotes').checked;
+  const cols = ['Workstream','Group','Sub-Category','Activity','Task','Due Date','Status','Assigned'];
+  if(includeNotes) cols.push('Notes');
+  document.getElementById('exportPreviewHead').innerHTML =
+    `<tr><th style="width:30px;"></th>${cols.map(c=>`<th>${escapeHtml(c)}</th>`).join('')}</tr>`;
+  document.getElementById('exportPreviewBody').innerHTML = sorted.length ? sorted.map(t=>{
+    const excluded = exportState.deselected.has(t.id);
+    const cat = catMeta(t.category);
+    const notesCell = includeNotes ? `<td>${escapeHtml(t.comments||'')}</td>` : '';
+    return `<tr class="${excluded?'export-row-excluded':''}" data-id="${escapeHtml(t.id)}">
+      <td><input type="checkbox" class="export-row-check" data-id="${escapeHtml(t.id)}" ${excluded?'':'checked'}></td>
+      <td><span class="export-ws-swatch" style="background:${cat.fg};"></span>${escapeHtml(cat.label)}</td>
+      <td>${escapeHtml(groupOfSubCategory(t.category, t.subCategory))}</td>
+      <td>${escapeHtml(t.subCategory||'')}</td>
+      <td>${escapeHtml(t.activity||'')}</td>
+      <td>${escapeHtml(t.description||'')}</td>
+      <td>${fmtDateWithYear(t.date)}</td>
+      <td>${escapeHtml(t.status||'')}</td>
+      <td>${escapeHtml(t.assignedPerson||'')}</td>
+      ${notesCell}
+    </tr>`;
+  }).join('') : `<tr><td colspan="${cols.length+1}">${emptyHtml('No tasks match these filters.')}</td></tr>`;
+  document.querySelectorAll('.export-row-check').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const id = cb.dataset.id;
+      if(cb.checked) exportState.deselected.delete(id); else exportState.deselected.add(id);
+      cb.closest('tr').classList.toggle('export-row-excluded', !cb.checked);
+      updateExportSummary();
+    });
+  });
+  updateExportSummary();
+}
+function updateExportSummary(){
+  const total = exportSortedTasks().length;
+  const selected = exportSelectedTasks().length;
+  document.getElementById('exportSummaryText').textContent = selected+' of '+total+' tasks selected';
+  document.getElementById('btnConfirmExportTasks').disabled = selected===0;
+}
+
+async function buildExportDocx(tasks, includeNotes){
+  const { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, WidthType, PageOrientation, VerticalMergeType } = window.docx;
+  const headers = ['Workstream','Group','Sub-Category','Activity','Task','Due Date','Status','Assigned'];
+  if(includeNotes) headers.push('Notes');
+
+  function textCell(text, opts){
+    opts = opts || {};
+    return new TableCell({
+      verticalMerge: opts.merge,
+      shading: opts.fill ? { fill: opts.fill } : undefined,
+      children: [new Paragraph({ children:[new TextRun({ text: text||'', bold: !!opts.bold, color: opts.color, font:'Verdana', size:18 })] })]
+    });
+  }
+
+  const headerRow = new TableRow({
+    tableHeader: true,
+    children: headers.map(h=> textCell(h, {fill:'1F2937', bold:true, color:'FFFFFF'}))
+  });
+
+  let lastCat=null, lastGroup=null, lastSub=null, lastAct=null;
+  const bodyRows = tasks.map(t=>{
+    const cat = catMeta(t.category);
+    const group = groupOfSubCategory(t.category, t.subCategory);
+    const sameCat = t.category===lastCat;
+    const sameGroup = sameCat && group===lastGroup;
+    const sameSub = sameGroup && t.subCategory===lastSub;
+    const sameAct = sameSub && t.activity===lastAct;
+    lastCat = t.category; lastGroup = group; lastSub = t.subCategory; lastAct = t.activity;
+
+    const catColor = cat.fg.replace('#','').toUpperCase();
+    const cells = [
+      textCell(sameCat?'':cat.label, {merge: sameCat?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART, fill: sameCat?undefined:catColor, bold:true, color: sameCat?undefined:'FFFFFF'}),
+      textCell(sameGroup?'':group, {merge: sameGroup?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART}),
+      textCell(sameSub?'':(t.subCategory||''), {merge: sameSub?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART}),
+      textCell(sameAct?'':(t.activity||''), {merge: sameAct?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART}),
+      textCell(t.description||''),
+      textCell(fmtDateWithYear(t.date)),
+      textCell(t.status||''),
+      textCell(t.assignedPerson||''),
+    ];
+    if(includeNotes) cells.push(textCell(t.comments||''));
+    return new TableRow({ children: cells });
+  });
+
+  const table = new Table({ width:{size:100, type:WidthType.PERCENTAGE}, rows:[headerRow, ...bodyRows] });
+  const doc = new Document({
+    sections: [{
+      properties: {
+        page: { size:{orientation:PageOrientation.LANDSCAPE}, margin:{top:500, bottom:500, left:500, right:500} }
+      },
+      children: [table]
+    }]
+  });
+
+  const blob = await Packer.toBlob(doc);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'Upcoming_Tasks_'+dateSuffix()+'.docx';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 2000);
+}
+
 /* ---------------- RENDER ALL ---------------- */
 function renderAll(){
   renderCategoryNav();
@@ -4144,6 +4409,44 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('btnConfirmFilename').addEventListener('click', confirmFilenameAndDownload);
   document.getElementById('filenameModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='filenameModalOverlay') closeFilenameModal(); });
   document.getElementById('filenameInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') confirmFilenameAndDownload(); });
+
+  document.getElementById('btnOpenExportTasks').addEventListener('click', openExportTasksModal);
+  document.getElementById('exportTasksModalClose').addEventListener('click', closeExportTasksModal);
+  document.getElementById('btnCancelExportTasks').addEventListener('click', closeExportTasksModal);
+  document.getElementById('exportTasksModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='exportTasksModalOverlay') closeExportTasksModal(); });
+  document.getElementById('exportIncludeOverdue').addEventListener('change', refreshExportModal);
+  document.getElementById('exportIncludeNotes').addEventListener('change', renderExportPreview);
+  document.getElementById('exportSelectAllBtn').addEventListener('click', ()=>{ exportState.deselected.clear(); renderExportPreview(); });
+  document.getElementById('exportDeselectAllBtn').addEventListener('click', ()=>{
+    exportSortedTasks().forEach(t=> exportState.deselected.add(t.id));
+    renderExportPreview();
+  });
+  document.getElementById('btnConfirmExportTasks').addEventListener('click', async ()=>{
+    const tasks = exportSelectedTasks();
+    if(!tasks.length) return;
+    const includeNotes = document.getElementById('exportIncludeNotes').checked;
+    const btn = document.getElementById('btnConfirmExportTasks');
+    btn.disabled = true; btn.textContent = 'Building...';
+    try{
+      await buildExportDocx(tasks, includeNotes);
+      closeExportTasksModal();
+      toast('Exported '+tasks.length+' task(s) to Word');
+    }catch(e){
+      toast('Could not build the Word file', 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Export to Word';
+    }
+  });
+  ['exportTypeDropdown','exportCatDropdown','exportGroupDropdown','exportSubCatDropdown'].forEach(id=>{
+    document.getElementById(id+'Btn').addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const panel = document.getElementById(id+'Panel');
+      const willOpen = !panel.classList.contains('open');
+      closeAllDropdownChecks();
+      if(willOpen) panel.classList.add('open');
+    });
+    document.getElementById(id+'Panel').addEventListener('click', (e)=> e.stopPropagation());
+  });
 
   document.getElementById('globalSearch').addEventListener('input', (e)=>{
     state.searchTerm = e.target.value.trim();
