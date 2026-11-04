@@ -4077,7 +4077,6 @@ function exportSortedTasks(){
       return ga.localeCompare(gb);
     }
     if(a.subCategory !== b.subCategory) return (a.subCategory||'').localeCompare(b.subCategory||'');
-    if((a.activity||'') !== (b.activity||'')) return (a.activity||'').localeCompare(b.activity||'');
     return new Date(a.date||'2100-01-01') - new Date(b.date||'2100-01-01');
   });
 }
@@ -4414,7 +4413,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('exportTasksModalClose').addEventListener('click', closeExportTasksModal);
   document.getElementById('btnCancelExportTasks').addEventListener('click', closeExportTasksModal);
   document.getElementById('exportTasksModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='exportTasksModalOverlay') closeExportTasksModal(); });
-  document.getElementById('exportIncludeOverdue').addEventListener('change', refreshExportModal);
+  document.getElementById('exportIncludeOverdue').addEventListener('change', (e)=>{
+    exportState.includeOverdue = e.target.checked;
+    refreshExportModal();
+  });
   document.getElementById('exportIncludeNotes').addEventListener('change', renderExportPreview);
   document.getElementById('exportSelectAllBtn').addEventListener('click', ()=>{ exportState.deselected.clear(); renderExportPreview(); });
   document.getElementById('exportDeselectAllBtn').addEventListener('click', ()=>{
@@ -4424,6 +4426,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('btnConfirmExportTasks').addEventListener('click', async ()=>{
     const tasks = exportSelectedTasks();
     if(!tasks.length) return;
+    if(!window.docx){
+      toast('The Word export library failed to load — check your connection and try again', 'error');
+      return;
+    }
     const includeNotes = document.getElementById('exportIncludeNotes').checked;
     const btn = document.getElementById('btnConfirmExportTasks');
     btn.disabled = true; btn.textContent = 'Building...';
@@ -4432,7 +4438,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
       closeExportTasksModal();
       toast('Exported '+tasks.length+' task(s) to Word');
     }catch(e){
-      toast('Could not build the Word file', 'error');
+      console.error('Export to Word failed:', e);
+      toast('Could not build the Word file: '+(e && e.message ? e.message : e), 'error');
     } finally {
       btn.disabled = false; btn.textContent = 'Export to Word';
     }
