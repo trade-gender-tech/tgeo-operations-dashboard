@@ -30520,6 +30520,16 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
 .export-filters-row{display:flex; flex-wrap:wrap; align-items:center; gap:14px; margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--border);}
 .export-toggle{display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:600; color:var(--text); cursor:pointer;}
 .export-toggle input{cursor:pointer;}
+.export-range-row{margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--border);}
+.export-range-label{font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:10px;}
+.dual-slider{position:relative; height:20px;}
+.dual-slider-track{position:absolute; top:8px; left:0; right:0; height:4px; background:var(--border); border-radius:2px;}
+.dual-slider-range{position:absolute; top:8px; height:4px; background:var(--violet); border-radius:2px;}
+.dual-slider input[type=range]{position:absolute; left:0; right:0; top:0; width:100%; height:20px; margin:0; background:transparent; -webkit-appearance:none; appearance:none; pointer-events:none;}
+.dual-slider input[type=range]::-webkit-slider-runnable-track{-webkit-appearance:none; height:20px; background:transparent;}
+.dual-slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; pointer-events:auto; width:16px; height:16px; border-radius:50%; background:var(--violet); border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.35); cursor:pointer; margin-top:2px;}
+.dual-slider input[type=range]::-moz-range-track{height:4px; background:transparent; border:none;}
+.dual-slider input[type=range]::-moz-range-thumb{pointer-events:auto; width:16px; height:16px; border-radius:50%; background:var(--violet); border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.35); cursor:pointer;}
 .export-summary-row{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;}
 .export-summary-text{font-size:12.5px; font-weight:700; color:var(--text-dim);}
 .export-quick-action{font-size:11.5px; font-weight:700; color:var(--violet); cursor:pointer;}
@@ -31401,6 +31411,15 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
         <div class="dropdown-check" id="exportSubCatDropdown">
           <button type="button" class="dropdown-check-btn" id="exportSubCatDropdownBtn">All Sub-Categories</button>
           <div class="dropdown-check-panel" id="exportSubCatDropdownPanel"></div>
+        </div>
+      </div>
+      <div class="export-range-row">
+        <div class="export-range-label">Due date range: <span id="exportRangeFromLabel"></span> – <span id="exportRangeToLabel"></span></div>
+        <div class="dual-slider" id="exportDateRangeSlider">
+          <div class="dual-slider-track"></div>
+          <div class="dual-slider-range" id="exportRangeFill"></div>
+          <input type="range" id="exportDateFromRange" min="0" max="365" value="0">
+          <input type="range" id="exportDateToRange" min="0" max="365" value="365">
         </div>
       </div>
       <div class="export-summary-row">
@@ -34302,15 +34321,25 @@ function saveExcelScoped(tasks, categoryKey){
 }
 
 /* ---------------- EXPORT UPCOMING TASKS TO WORD ---------------- */
-let exportState = { includeOverdue:false, includeNotes:true, taskTypes:[], workstreams:[], groups:[], subCats:[], deselected:new Set() };
+let exportState = { includeOverdue:false, includeNotes:true, includeAssigned:false, taskTypes:[], workstreams:[], groups:[], subCats:[], deselected:new Set(), dateFromOffset:0, dateToOffset:365 };
 
+function endOfYearOffset(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const endOfYear = new Date(today.getFullYear(), 11, 31);
+  return Math.round((endOfYear - today) / 86400000);
+}
+function offsetToDateStr(offset){
+  const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()+offset);
+  const pad = n => String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+}
 function exportCandidatePool(){
   return state.tasks.filter(t=>{
     if(t.status==='Done' || t.status==='Cancelled') return false;
     if(!t.date) return false;
     const diff = daysFromToday(t.date);
     if(diff===null) return false;
-    if(diff>=0) return true;
+    if(diff>=0) return diff >= exportState.dateFromOffset && diff <= exportState.dateToOffset;
     return exportState.includeOverdue;
   });
 }
@@ -34345,12 +34374,30 @@ function exportSelectedTasks(){
 }
 
 function openExportTasksModal(){
-  exportState = { includeOverdue:false, includeNotes:true, includeAssigned:false, taskTypes:[], workstreams:[], groups:[], subCats:[], deselected:new Set() };
+  const maxOffset = endOfYearOffset();
+  exportState = { includeOverdue:false, includeNotes:true, includeAssigned:false, taskTypes:[], workstreams:[], groups:[], subCats:[], deselected:new Set(), dateFromOffset:0, dateToOffset:maxOffset };
   document.getElementById('exportIncludeOverdue').checked = false;
   document.getElementById('exportIncludeAssigned').checked = false;
   document.getElementById('exportIncludeNotes').checked = true;
+  const fromSlider = document.getElementById('exportDateFromRange');
+  const toSlider = document.getElementById('exportDateToRange');
+  fromSlider.min = toSlider.min = 0;
+  fromSlider.max = toSlider.max = maxOffset;
+  fromSlider.value = 0;
+  toSlider.value = maxOffset;
+  updateExportRangeUI();
   refreshExportModal();
   document.getElementById('exportTasksModalOverlay').classList.add('open');
+}
+function updateExportRangeUI(){
+  const fromSlider = document.getElementById('exportDateFromRange');
+  const toSlider = document.getElementById('exportDateToRange');
+  const max = Number(fromSlider.max) || 1;
+  document.getElementById('exportRangeFromLabel').textContent = fmtDateWithYear(offsetToDateStr(exportState.dateFromOffset));
+  document.getElementById('exportRangeToLabel').textContent = fmtDateWithYear(offsetToDateStr(exportState.dateToOffset));
+  const fill = document.getElementById('exportRangeFill');
+  fill.style.left = (exportState.dateFromOffset/max*100)+'%';
+  fill.style.right = (100 - exportState.dateToOffset/max*100)+'%';
 }
 function closeExportTasksModal(){
   document.getElementById('exportTasksModalOverlay').classList.remove('open');
@@ -34713,6 +34760,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
   document.getElementById('exportIncludeNotes').addEventListener('change', renderExportPreview);
   document.getElementById('exportIncludeAssigned').addEventListener('change', renderExportPreview);
+  document.getElementById('exportDateFromRange').addEventListener('input', (e)=>{
+    let fromVal = Number(e.target.value);
+    if(fromVal > exportState.dateToOffset){ fromVal = exportState.dateToOffset; e.target.value = fromVal; }
+    exportState.dateFromOffset = fromVal;
+    updateExportRangeUI();
+    refreshExportModal();
+  });
+  document.getElementById('exportDateToRange').addEventListener('input', (e)=>{
+    let toVal = Number(e.target.value);
+    if(toVal < exportState.dateFromOffset){ toVal = exportState.dateFromOffset; e.target.value = toVal; }
+    exportState.dateToOffset = toVal;
+    updateExportRangeUI();
+    refreshExportModal();
+  });
   document.getElementById('exportSelectAllBtn').addEventListener('click', ()=>{ exportState.deselected.clear(); renderExportPreview(); });
   document.getElementById('exportDeselectAllBtn').addEventListener('click', ()=>{
     exportSortedTasks().forEach(t=> exportState.deselected.add(t.id));
