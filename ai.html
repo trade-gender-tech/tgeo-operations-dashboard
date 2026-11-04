@@ -34446,10 +34446,10 @@ async function buildExportDocx(tasks, includeNotes, includeAssigned){
   if(includeNotes) headers.push('Notes');
 
   const narrowPct = {workstream:4, group:4, sub:5, activity:6};
-  const dueDatePct = 7, statusPct = 7, assignedPct = includeAssigned ? 8 : 0;
+  const dueDatePct = 9, statusPct = 7, assignedPct = includeAssigned ? 8 : 0;
   const fixedPct = narrowPct.workstream + narrowPct.group + narrowPct.sub + narrowPct.activity + dueDatePct + statusPct + assignedPct;
   const remainingPct = 100 - fixedPct;
-  const notesPct = includeNotes ? Math.round(remainingPct * 0.4) : 0;
+  const notesPct = includeNotes ? Math.round(remainingPct * 0.25) : 0;
   const taskPct = remainingPct - notesPct;
 
   function textCell(text, opts){
