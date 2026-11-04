@@ -31384,6 +31384,7 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
     <div class="modal-body">
       <div class="export-filters-row">
         <label class="export-toggle"><input type="checkbox" id="exportIncludeOverdue"> Include overdue tasks</label>
+        <label class="export-toggle"><input type="checkbox" id="exportIncludeAssigned"> Include Assigned column</label>
         <label class="export-toggle"><input type="checkbox" id="exportIncludeNotes" checked> Include Notes column</label>
         <div class="dropdown-check" id="exportTypeDropdown">
           <button type="button" class="dropdown-check-btn" id="exportTypeDropdownBtn">All Task Types</button>
@@ -34344,8 +34345,9 @@ function exportSelectedTasks(){
 }
 
 function openExportTasksModal(){
-  exportState = { includeOverdue:false, includeNotes:true, taskTypes:[], workstreams:[], groups:[], subCats:[], deselected:new Set() };
+  exportState = { includeOverdue:false, includeNotes:true, includeAssigned:false, taskTypes:[], workstreams:[], groups:[], subCats:[], deselected:new Set() };
   document.getElementById('exportIncludeOverdue').checked = false;
+  document.getElementById('exportIncludeAssigned').checked = false;
   document.getElementById('exportIncludeNotes').checked = true;
   refreshExportModal();
   document.getElementById('exportTasksModalOverlay').classList.add('open');
@@ -34396,13 +34398,16 @@ function renderExportFilters(){
 function renderExportPreview(){
   const sorted = exportSortedTasks();
   const includeNotes = document.getElementById('exportIncludeNotes').checked;
-  const cols = ['Workstream','Group','Sub-Category','Activity','Task','Due Date','Status','Assigned'];
+  const includeAssigned = document.getElementById('exportIncludeAssigned').checked;
+  const cols = ['Workstream','Group','Sub-Category','Activity','Task','Due Date','Status'];
+  if(includeAssigned) cols.push('Assigned');
   if(includeNotes) cols.push('Notes');
   document.getElementById('exportPreviewHead').innerHTML =
     `<tr><th style="width:30px;"></th>${cols.map(c=>`<th>${escapeHtml(c)}</th>`).join('')}</tr>`;
   document.getElementById('exportPreviewBody').innerHTML = sorted.length ? sorted.map(t=>{
     const excluded = exportState.deselected.has(t.id);
     const cat = catMeta(t.category);
+    const assignedCell = includeAssigned ? `<td>${escapeHtml(t.assignedPerson||'')}</td>` : '';
     const notesCell = includeNotes ? `<td>${escapeHtml(t.comments||'')}</td>` : '';
     return `<tr class="${excluded?'export-row-excluded':''}" data-id="${escapeHtml(t.id)}">
       <td><input type="checkbox" class="export-row-check" data-id="${escapeHtml(t.id)}" ${excluded?'':'checked'}></td>
@@ -34413,7 +34418,7 @@ function renderExportPreview(){
       <td>${escapeHtml(t.description||'')}</td>
       <td>${fmtDateWithYear(t.date)}</td>
       <td>${escapeHtml(t.status||'')}</td>
-      <td>${escapeHtml(t.assignedPerson||'')}</td>
+      ${assignedCell}
       ${notesCell}
     </tr>`;
   }).join('') : `<tr><td colspan="${cols.length+1}">${emptyHtml('No tasks match these filters.')}</td></tr>`;
@@ -34434,23 +34439,37 @@ function updateExportSummary(){
   document.getElementById('btnConfirmExportTasks').disabled = selected===0;
 }
 
-async function buildExportDocx(tasks, includeNotes){
-  const { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, WidthType, PageOrientation, VerticalMergeType } = window.docx;
-  const headers = ['Workstream','Group','Sub-Category','Activity','Task','Due Date','Status','Assigned'];
+async function buildExportDocx(tasks, includeNotes, includeAssigned){
+  const { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, WidthType, PageOrientation, VerticalMergeType, TextDirection, AlignmentType, VerticalAlign } = window.docx;
+  const headers = ['Workstream','Group','Sub-Category','Activity','Task','Due Date','Status'];
+  if(includeAssigned) headers.push('Assigned');
   if(includeNotes) headers.push('Notes');
+
+  const narrowPct = {workstream:4, group:4, sub:5, activity:6};
+  const dueDatePct = 7, statusPct = 7, assignedPct = includeAssigned ? 8 : 0;
+  const fixedPct = narrowPct.workstream + narrowPct.group + narrowPct.sub + narrowPct.activity + dueDatePct + statusPct + assignedPct;
+  const remainingPct = 100 - fixedPct;
+  const notesPct = includeNotes ? Math.round(remainingPct * 0.4) : 0;
+  const taskPct = remainingPct - notesPct;
 
   function textCell(text, opts){
     opts = opts || {};
     return new TableCell({
       verticalMerge: opts.merge,
+      width: opts.widthPct !== undefined ? {size: opts.widthPct, type: WidthType.PERCENTAGE} : undefined,
+      textDirection: opts.vertical ? TextDirection.BOTTOM_TO_TOP_LEFT_TO_RIGHT : undefined,
+      verticalAlign: opts.vertical ? VerticalAlign.CENTER : undefined,
       shading: opts.fill ? { fill: opts.fill } : undefined,
-      children: [new Paragraph({ children:[new TextRun({ text: text||'', bold: !!opts.bold, color: opts.color, font:'Verdana', size:18 })] })]
+      children: [new Paragraph({ alignment: (opts.vertical || opts.center) ? AlignmentType.CENTER : undefined, children:[new TextRun({ text: text||'', bold: !!opts.bold, color: opts.color, font:'Verdana', size:18 })] })]
     });
   }
 
+  const headerWidths = [narrowPct.workstream, narrowPct.group, narrowPct.sub, narrowPct.activity, taskPct, dueDatePct, statusPct];
+  if(includeAssigned) headerWidths.push(assignedPct);
+  if(includeNotes) headerWidths.push(notesPct);
   const headerRow = new TableRow({
     tableHeader: true,
-    children: headers.map(h=> textCell(h, {fill:'1F2937', bold:true, color:'FFFFFF'}))
+    children: headers.map((h,i)=> textCell(h, {fill:'1F2937', bold:true, color:'FFFFFF', widthPct: headerWidths[i], center:true}))
   });
 
   let lastCat=null, lastGroup=null, lastSub=null, lastAct=null;
@@ -34465,16 +34484,16 @@ async function buildExportDocx(tasks, includeNotes){
 
     const catColor = cat.fg.replace('#','').toUpperCase();
     const cells = [
-      textCell(sameCat?'':cat.label, {merge: sameCat?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART, fill: sameCat?undefined:catColor, bold:true, color: sameCat?undefined:'FFFFFF'}),
-      textCell(sameGroup?'':group, {merge: sameGroup?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART}),
-      textCell(sameSub?'':(t.subCategory||''), {merge: sameSub?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART}),
-      textCell(sameAct?'':(t.activity||''), {merge: sameAct?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART}),
-      textCell(t.description||''),
-      textCell(fmtDateWithYear(t.date)),
-      textCell(t.status||''),
-      textCell(t.assignedPerson||''),
+      textCell(sameCat?'':cat.label, {merge: sameCat?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART, fill: sameCat?undefined:catColor, bold:true, color: sameCat?undefined:'FFFFFF', widthPct: narrowPct.workstream, vertical:true}),
+      textCell(sameGroup?'':group, {merge: sameGroup?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART, widthPct: narrowPct.group, vertical:true}),
+      textCell(sameSub?'':(t.subCategory||''), {merge: sameSub?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART, widthPct: narrowPct.sub, vertical:true}),
+      textCell(sameAct?'':(t.activity||''), {merge: sameAct?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART, widthPct: narrowPct.activity, vertical:true}),
+      textCell(t.description||'', {widthPct: taskPct}),
+      textCell(fmtDateWithYear(t.date), {widthPct: dueDatePct}),
+      textCell(t.status||'', {widthPct: statusPct}),
     ];
-    if(includeNotes) cells.push(textCell(t.comments||''));
+    if(includeAssigned) cells.push(textCell(t.assignedPerson||'', {widthPct: assignedPct}));
+    if(includeNotes) cells.push(textCell(t.comments||'', {widthPct: notesPct}));
     return new TableRow({ children: cells });
   });
 
@@ -34677,6 +34696,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     refreshExportModal();
   });
   document.getElementById('exportIncludeNotes').addEventListener('change', renderExportPreview);
+  document.getElementById('exportIncludeAssigned').addEventListener('change', renderExportPreview);
   document.getElementById('exportSelectAllBtn').addEventListener('click', ()=>{ exportState.deselected.clear(); renderExportPreview(); });
   document.getElementById('exportDeselectAllBtn').addEventListener('click', ()=>{
     exportSortedTasks().forEach(t=> exportState.deselected.add(t.id));
@@ -34690,10 +34710,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
       return;
     }
     const includeNotes = document.getElementById('exportIncludeNotes').checked;
+    const includeAssigned = document.getElementById('exportIncludeAssigned').checked;
     const btn = document.getElementById('btnConfirmExportTasks');
     btn.disabled = true; btn.textContent = 'Building...';
     try{
-      await buildExportDocx(tasks, includeNotes);
+      await buildExportDocx(tasks, includeNotes, includeAssigned);
       closeExportTasksModal();
       toast('Exported '+tasks.length+' task(s) to Word');
     }catch(e){
