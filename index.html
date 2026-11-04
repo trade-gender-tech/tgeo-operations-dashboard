@@ -34145,12 +34145,12 @@ function commentCellColor(comment){
 
 
 function taskRowArray(t){
-  return [t.month,t.date,t.category,t.subCategory,t.activity,t.taskType,t.description,t.assignedPerson,t.status,
-    t.statusComment,t.revisedDate,t.links,t.comments,t.createdDate||'',t.completionDate||'',t.hoursSpent||'',
+  return [t.month, t.date?fmtDateWithYear(t.date):'', t.category,t.subCategory,t.activity,t.taskType,t.description,t.assignedPerson,t.status,
+    t.statusComment, t.revisedDate?fmtDateWithYear(t.revisedDate):'', t.links,t.comments, t.createdDate?fmtDateWithYear(t.createdDate):'', t.completionDate?fmtDateWithYear(t.completionDate):'', t.hoursSpent||'',
     t.nDrivePath||'',t.closureNotes||'',t.cancellationCategory||''];
 }
 function formRowArray(f){
-  return [f.description, f.received, f.date||'', f.deadline, f.nDrivePath||'', isFormLive(f) ? 'Live' : 'Closed'];
+  return [f.description, f.received, f.date?fmtDateWithYear(f.date):'', f.deadline, f.nDrivePath||'', isFormLive(f) ? 'Live' : 'Closed'];
 }
 
 function writeSheet(wb, tabName, headers, rows, colorRules, titleText){
@@ -34190,6 +34190,7 @@ function writeSheet(wb, tabName, headers, rows, colorRules, titleText){
   headerRow.commit();
 
   const boldCols = new Set(['MONTH','CATEGORY','SUB CATEGORY']);
+  const textDateCols = new Set(['DATE','REVISED DATE','CREATED DATE','COMPLETION DATE','Date']);
   rows.forEach((rowVals, i)=>{
     const r = headerRowIdx + 1 + i;
     const dataRow = ws.getRow(r);
@@ -34201,6 +34202,7 @@ function writeSheet(wb, tabName, headers, rows, colorRules, titleText){
       cell.border = cellBorder;
       cell.alignment = { vertical:'top', wrapText:true };
       cell.font = { name:'Calibri', size:10, bold: boldCols.has(headers[c]) };
+      if(textDateCols.has(headers[c])) cell.numFmt = '@';
       if(banded) cell.fill = bandFill;
     });
     dataRow.commit();
@@ -34438,7 +34440,7 @@ function updateExportSummary(){
 }
 
 async function buildExportDocx(tasks, includeNotes, includeAssigned){
-  const { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, WidthType, PageOrientation, VerticalMergeType, TextDirection, AlignmentType, VerticalAlign } = window.docx;
+  const { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, WidthType, PageOrientation, VerticalMergeType, TextDirection, AlignmentType, VerticalAlign, Footer, PageNumber, Tab, TabStopType, TabStopPosition } = window.docx;
   const headers = ['Workstream','Group','Sub-Category','Activity','Task','Due Date','Status'];
   if(includeAssigned) headers.push('Assigned');
   if(includeNotes) headers.push('Notes');
@@ -34496,11 +34498,27 @@ async function buildExportDocx(tasks, includeNotes, includeAssigned){
   });
 
   const table = new Table({ width:{size:100, type:WidthType.PERCENTAGE}, rows:[headerRow, ...bodyRows] });
+
+  const pageMargin = 500;
+  const pageContentWidth = 16838 - pageMargin - pageMargin; // A4 landscape width minus left/right margins, in twips
+  const footer = new Footer({
+    children: [
+      new Paragraph({
+        tabStops: [{ type: TabStopType.RIGHT, position: pageContentWidth }],
+        children: [
+          new TextRun({ text: 'Downloaded on: '+fmtDateWithYear(new Date().toISOString().slice(0,10)), font:'Verdana', size:16 }),
+          new TextRun({ children: [new Tab(), 'Page ', PageNumber.CURRENT, ' of ', PageNumber.TOTAL_PAGES], font:'Verdana', size:16 }),
+        ]
+      })
+    ]
+  });
+
   const doc = new Document({
     sections: [{
       properties: {
         page: { size:{orientation:PageOrientation.LANDSCAPE}, margin:{top:500, bottom:500, left:500, right:500} }
       },
+      footers: { default: footer },
       children: [table]
     }]
   });
