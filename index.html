@@ -31393,6 +31393,10 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
     </div>
     <div class="modal-body">
       <div class="export-filters-row">
+        <div class="segmented" id="exportPageSizeToggle" style="max-width:140px;">
+          <button type="button" class="seg-btn active" data-size="A4">A4</button>
+          <button type="button" class="seg-btn" data-size="A3">A3</button>
+        </div>
         <label class="export-toggle"><input type="checkbox" id="exportIncludeOverdue"> Include overdue tasks</label>
         <label class="export-toggle"><input type="checkbox" id="exportIncludeAssigned"> Include Assigned column</label>
         <label class="export-toggle"><input type="checkbox" id="exportIncludeNotes" checked> Include Notes column</label>
@@ -34375,10 +34379,11 @@ function exportSelectedTasks(){
 
 function openExportTasksModal(){
   const maxOffset = endOfYearOffset();
-  exportState = { includeOverdue:false, includeNotes:true, includeAssigned:false, taskTypes:[], workstreams:[], groups:[], subCats:[], deselected:new Set(), dateFromOffset:0, dateToOffset:maxOffset };
+  exportState = { includeOverdue:false, includeNotes:true, includeAssigned:false, pageSize:'A4', taskTypes:[], workstreams:[], groups:[], subCats:[], deselected:new Set(), dateFromOffset:0, dateToOffset:maxOffset };
   document.getElementById('exportIncludeOverdue').checked = false;
   document.getElementById('exportIncludeAssigned').checked = false;
   document.getElementById('exportIncludeNotes').checked = true;
+  document.querySelectorAll('#exportPageSizeToggle .seg-btn').forEach(b=> b.classList.toggle('active', b.dataset.size==='A4'));
   const fromSlider = document.getElementById('exportDateFromRange');
   const toSlider = document.getElementById('exportDateToRange');
   fromSlider.min = toSlider.min = 0;
@@ -34486,23 +34491,24 @@ function updateExportSummary(){
   document.getElementById('btnConfirmExportTasks').disabled = selected===0;
 }
 
-async function buildExportDocx(tasks, includeNotes, includeAssigned){
+async function buildExportDocx(tasks, includeNotes, includeAssigned, pageSize){
   const { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, WidthType, PageOrientation, VerticalMergeType, TextDirection, AlignmentType, VerticalAlign, Footer, PageNumber, Tab, TabStopType, TabStopPosition } = window.docx;
-  const headers = ['Workstream','Group','Sub-Category','Activity','Task','Due Date','Status'];
-  if(includeAssigned) headers.push('Assigned');
-  if(includeNotes) headers.push('Notes');
+  const HEADER_FILL = '2E74B5';
+  const EXPORT_TITLE = 'TGEO – current work';
 
-  const narrowPct = {workstream:4, group:4, sub:5, activity:14};
-  const dueDatePct = 9, statusPct = 7, assignedPct = includeAssigned ? 8 : 0;
+  const narrowPct = {workstream:4, group:4, sub:4, activity:13};
+  const dueDatePct = 11, statusPct = 8, assignedPct = includeAssigned ? 8 : 0;
   const fixedPct = narrowPct.workstream + narrowPct.group + narrowPct.sub + narrowPct.activity + dueDatePct + statusPct + assignedPct;
   const remainingPct = 100 - fixedPct;
-  const notesPct = includeNotes ? Math.round(remainingPct * 0.25) : 0;
+  const notesPct = includeNotes ? Math.round(remainingPct * 0.357) : 0;
   const taskPct = remainingPct - notesPct;
+  const categoryPct = narrowPct.workstream + narrowPct.group + narrowPct.sub;
 
   function textCell(text, opts){
     opts = opts || {};
     return new TableCell({
       verticalMerge: opts.merge,
+      columnSpan: opts.columnSpan,
       width: opts.widthPct !== undefined ? {size: opts.widthPct, type: WidthType.PERCENTAGE} : undefined,
       textDirection: opts.vertical ? TextDirection.BOTTOM_TO_TOP_LEFT_TO_RIGHT : undefined,
       verticalAlign: opts.vertical ? VerticalAlign.CENTER : undefined,
@@ -34511,43 +34517,79 @@ async function buildExportDocx(tasks, includeNotes, includeAssigned){
     });
   }
 
-  const headerWidths = [narrowPct.workstream, narrowPct.group, narrowPct.sub, narrowPct.activity, taskPct, dueDatePct, statusPct];
-  if(includeAssigned) headerWidths.push(assignedPct);
-  if(includeNotes) headerWidths.push(notesPct);
-  const headerRow = new TableRow({
-    tableHeader: true,
-    children: headers.map((h,i)=> textCell(h, {fill:'1F2937', bold:true, color:'FFFFFF', widthPct: headerWidths[i], center:true}))
-  });
-
-  let lastCat=null, lastGroup=null, lastSub=null, lastAct=null;
-  const bodyRows = tasks.map(t=>{
-    const cat = catMeta(t.category);
-    const group = groupOfSubCategory(t.category, t.subCategory);
-    const sameCat = t.category===lastCat;
-    const sameGroup = sameCat && group===lastGroup;
-    const sameSub = sameGroup && t.subCategory===lastSub;
-    const sameAct = sameSub && t.activity===lastAct;
-    lastCat = t.category; lastGroup = group; lastSub = t.subCategory; lastAct = t.activity;
-
-    const catColor = cat.fg.replace('#','').toUpperCase();
+  function buildHeaderRow(){
     const cells = [
-      textCell(sameCat?'':cat.label, {merge: sameCat?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART, fill: sameCat?undefined:catColor, bold:true, color: sameCat?undefined:'FFFFFF', widthPct: narrowPct.workstream, vertical:true}),
-      textCell(sameGroup?'':group, {merge: sameGroup?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART, widthPct: narrowPct.group, vertical:true}),
-      textCell(sameSub?'':(t.subCategory||''), {merge: sameSub?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART, widthPct: narrowPct.sub, vertical:true}),
-      textCell(sameAct?'':(t.activity||''), {merge: sameAct?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART, widthPct: narrowPct.activity}),
-      textCell(t.description||'', {widthPct: taskPct}),
-      textCell(fmtDateWithYear(t.date), {widthPct: dueDatePct}),
-      textCell(t.status||'', {widthPct: statusPct}),
+      textCell('Category', {fill:HEADER_FILL, bold:true, color:'FFFFFF', widthPct: categoryPct, center:true, columnSpan:3}),
+      textCell('Activity', {fill:HEADER_FILL, bold:true, color:'FFFFFF', widthPct: narrowPct.activity, center:true}),
+      textCell('Task', {fill:HEADER_FILL, bold:true, color:'FFFFFF', widthPct: taskPct, center:true}),
+      textCell('Due Date', {fill:HEADER_FILL, bold:true, color:'FFFFFF', widthPct: dueDatePct, center:true}),
+      textCell('Status', {fill:HEADER_FILL, bold:true, color:'FFFFFF', widthPct: statusPct, center:true}),
     ];
-    if(includeAssigned) cells.push(textCell(t.assignedPerson||'', {widthPct: assignedPct}));
-    if(includeNotes) cells.push(textCell(t.comments||'', {widthPct: notesPct}));
-    return new TableRow({ children: cells });
+    if(includeAssigned) cells.push(textCell('Assigned', {fill:HEADER_FILL, bold:true, color:'FFFFFF', widthPct: assignedPct, center:true}));
+    if(includeNotes) cells.push(textCell('Notes', {fill:HEADER_FILL, bold:true, color:'FFFFFF', widthPct: notesPct, center:true}));
+    return new TableRow({ tableHeader: true, children: cells });
+  }
+
+  function buildCategoryTable(catTasks){
+    const cat = catMeta(catTasks[0].category);
+    const catColor = cat.fg.replace('#','').toUpperCase();
+    let lastGroup=null, lastSub=null, lastAct=null;
+    const bodyRows = catTasks.map((t, idx)=>{
+      const group = groupOfSubCategory(t.category, t.subCategory);
+      const sameGroup = idx>0 && group===lastGroup;
+      const sameSub = sameGroup && t.subCategory===lastSub;
+      const sameAct = sameSub && t.activity===lastAct;
+      lastGroup = group; lastSub = t.subCategory; lastAct = t.activity;
+
+      const cells = [
+        textCell(idx===0 ? cat.label : '', {merge: idx===0?VerticalMergeType.RESTART:VerticalMergeType.CONTINUE, fill: idx===0?catColor:undefined, bold:true, color: idx===0?'FFFFFF':undefined, widthPct: narrowPct.workstream, vertical:true}),
+        textCell(sameGroup?'':group, {merge: sameGroup?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART, widthPct: narrowPct.group, vertical:true}),
+        textCell(sameSub?'':(t.subCategory||''), {merge: sameSub?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART, widthPct: narrowPct.sub, vertical:true}),
+        textCell(sameAct?'':(t.activity||''), {merge: sameAct?VerticalMergeType.CONTINUE:VerticalMergeType.RESTART, widthPct: narrowPct.activity}),
+        textCell(t.description||'', {widthPct: taskPct}),
+        textCell(fmtDateWithYear(t.date), {widthPct: dueDatePct}),
+        textCell(t.status||'', {widthPct: statusPct}),
+      ];
+      if(includeAssigned) cells.push(textCell(t.assignedPerson||'', {widthPct: assignedPct}));
+      if(includeNotes) cells.push(textCell(t.comments||'', {widthPct: notesPct}));
+      return new TableRow({ children: cells });
+    });
+    return new Table({ width:{size:100, type:WidthType.PERCENTAGE}, rows:[buildHeaderRow(), ...bodyRows] });
+  }
+
+  function titleBlock(withPageBreak){
+    return [
+      new Paragraph({ pageBreakBefore: !!withPageBreak, children: [] }),
+      new Paragraph({ children: [] }),
+      new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: EXPORT_TITLE, bold:true, color:'2F5496', size:40, font:'Verdana' })] }),
+      new Paragraph({ children: [] }),
+    ];
+  }
+
+  function splitByCategory(list){
+    const groups = [];
+    let current = null;
+    list.forEach(t=>{
+      if(!current || current.category !== t.category){
+        current = {category: t.category, items: []};
+        groups.push(current);
+      }
+      current.items.push(t);
+    });
+    return groups;
+  }
+
+  const groups = splitByCategory(tasks);
+  const children = [];
+  groups.forEach((g, idx)=>{
+    children.push(...titleBlock(idx>0));
+    children.push(buildCategoryTable(g.items));
   });
 
-  const table = new Table({ width:{size:100, type:WidthType.PERCENTAGE}, rows:[headerRow, ...bodyRows] });
-
+  const PAGE_SIZES = { A4: {width:11906, height:16838, code:9}, A3: {width:16838, height:23811, code:8} };
+  const pg = PAGE_SIZES[pageSize] || PAGE_SIZES.A4;
   const pageMargin = 500;
-  const pageContentWidth = 16838 - pageMargin - pageMargin; // A4 landscape width minus left/right margins, in twips
+  const pageContentWidth = pg.height - pageMargin - pageMargin; // landscape width minus left/right margins, in twips
   const footer = new Footer({
     children: [
       new Paragraph({
@@ -34563,10 +34605,10 @@ async function buildExportDocx(tasks, includeNotes, includeAssigned){
   const doc = new Document({
     sections: [{
       properties: {
-        page: { size:{orientation:PageOrientation.LANDSCAPE}, margin:{top:500, bottom:500, left:500, right:500} }
+        page: { size:{width:pg.width, height:pg.height, orientation:PageOrientation.LANDSCAPE, code:pg.code}, margin:{top:500, bottom:500, left:500, right:500} }
       },
       footers: { default: footer },
-      children: [table]
+      children: children
     }]
   });
 
@@ -34774,6 +34816,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
     updateExportRangeUI();
     refreshExportModal();
   });
+  document.querySelectorAll('#exportPageSizeToggle .seg-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('#exportPageSizeToggle .seg-btn').forEach(b=> b.classList.remove('active'));
+      btn.classList.add('active');
+      exportState.pageSize = btn.dataset.size;
+    });
+  });
   document.getElementById('exportSelectAllBtn').addEventListener('click', ()=>{ exportState.deselected.clear(); renderExportPreview(); });
   document.getElementById('exportDeselectAllBtn').addEventListener('click', ()=>{
     exportSortedTasks().forEach(t=> exportState.deselected.add(t.id));
@@ -34791,7 +34840,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const btn = document.getElementById('btnConfirmExportTasks');
     btn.disabled = true; btn.textContent = 'Building...';
     try{
-      await buildExportDocx(tasks, includeNotes, includeAssigned);
+      await buildExportDocx(tasks, includeNotes, includeAssigned, exportState.pageSize);
       closeExportTasksModal();
       toast('Exported '+tasks.length+' task(s) to Word');
     }catch(e){
