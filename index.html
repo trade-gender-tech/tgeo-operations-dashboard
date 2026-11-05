@@ -30968,6 +30968,7 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
                 <button class="icon-btn" id="calPrevMonth"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg></button>
                 <h2 id="calMonthTitle">Month Year</h2>
                 <button class="icon-btn" id="calNextMonth"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></button>
+                <button class="btn btn-primary btn-sm" id="btnOpenExportCalendar" style="margin-left:auto;">Export to Word</button>
               </div>
               <div class="cal-toggle-legend-row">
                 <div class="segmented cal-view-toggle" id="calViewModeToggle">
@@ -31382,6 +31383,29 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
     <div class="modal-foot">
       <button class="btn" id="btnCancelStatusOverrideModal">Cancel</button>
       <button class="btn btn-primary" id="btnConfirmStatusOverrideModal">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT CALENDAR TO WORD MODAL -->
+<div class="modal-overlay" id="exportCalendarModalOverlay">
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-head">
+      <h3>Export Calendar to Word</h3>
+      <div class="modal-close" id="exportCalendarModalClose">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="export-range-label" style="margin-bottom:14px;">Exports <b id="exportCalendarMonthLabel"></b> — the calendar grid on page 1, then a table of that month's tasks.</div>
+      <div class="segmented" id="exportCalendarPageSizeToggle" style="max-width:140px;">
+        <button type="button" class="seg-btn active" data-size="A4">A4</button>
+        <button type="button" class="seg-btn" data-size="A3">A3</button>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="btnCancelExportCalendar">Cancel</button>
+      <button class="btn btn-primary" id="btnConfirmExportCalendar">Export to Word</button>
     </div>
   </div>
 </div>
@@ -34443,6 +34467,18 @@ function exportSelectedTasks(){
   return exportSortedTasks().filter(t=> !exportState.deselected.has(t.id));
 }
 
+let exportCalendarPageSize = 'A4';
+function openExportCalendarModal(){
+  if(state.view.calViewMode !== 'month'){ toast('Switch to Month view to export the calendar', 'error'); return; }
+  exportCalendarPageSize = 'A4';
+  document.querySelectorAll('#exportCalendarPageSizeToggle .seg-btn').forEach(b=> b.classList.toggle('active', b.dataset.size==='A4'));
+  const monthLabel = new Date(state.view.calYear, state.view.calMonthIndex, 1).toLocaleDateString('en-GB',{month:'long', year:'numeric'});
+  document.getElementById('exportCalendarMonthLabel').textContent = monthLabel;
+  document.getElementById('exportCalendarModalOverlay').classList.add('open');
+}
+function closeExportCalendarModal(){
+  document.getElementById('exportCalendarModalOverlay').classList.remove('open');
+}
 function openExportTasksModal(){
   const maxOffset = endOfYearOffset();
   exportState = { includeOverdue:false, includeNotes:true, includeAssigned:false, pageSize:'A4', taskTypes:[], workstreams:[], groups:[], subCats:[], deselected:new Set(), dateFromOffset:0, dateToOffset:maxOffset };
@@ -34557,10 +34593,66 @@ function updateExportSummary(){
   document.getElementById('btnConfirmExportTasks').disabled = selected===0;
 }
 
-async function buildExportDocx(tasks, includeNotes, includeAssigned, pageSize){
-  const { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, WidthType, PageOrientation, VerticalMergeType, TextDirection, AlignmentType, VerticalAlign, Footer, PageNumber, Tab, TabStopType, TabStopPosition } = window.docx;
-  const HEADER_FILL = '2E74B5';
-  const EXPORT_TITLE = 'TGEO – current work';
+const DOCX_HEADER_FILL = '2E74B5';
+const DOCX_EXPORT_TITLE = 'TGEO – current work';
+const DOCX_PAGE_SIZES = { A4: {width:11906, height:16838, code:9}, A3: {width:16838, height:23811, code:8} };
+
+/* Title block matching the user's reference export: two blank lines, the
+   centered bold title, one blank line. Pass withPageBreak for every
+   section after the first so each page restates the same heading. */
+function buildWordTitleBlock(docxLib, withPageBreak, titleText){
+  const { Paragraph, TextRun, AlignmentType } = docxLib;
+  return [
+    new Paragraph({ pageBreakBefore: !!withPageBreak, children: [] }),
+    new Paragraph({ children: [] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: titleText, bold:true, color:'2F5496', size:40, font:'Verdana' })] }),
+    new Paragraph({ children: [] }),
+  ];
+}
+
+/* Builds the A4/A3 landscape section page size + a footer with
+   "Downloaded on: <date>" (left) and "Page X of Y" (right). */
+function buildWordPageSetup(docxLib, pageSize){
+  const { Paragraph, TextRun, Footer, PageNumber, Tab, TabStopType } = docxLib;
+  const pg = DOCX_PAGE_SIZES[pageSize] || DOCX_PAGE_SIZES.A4;
+  const pageMargin = 500;
+  const pageContentWidth = pg.height - pageMargin - pageMargin; // landscape width minus left/right margins, in twips
+  const footer = new Footer({
+    children: [
+      new Paragraph({
+        tabStops: [{ type: TabStopType.RIGHT, position: pageContentWidth }],
+        children: [
+          new TextRun({ text: 'Downloaded on: '+fmtDateWithYear(new Date().toISOString().slice(0,10)), font:'Verdana', size:16 }),
+          new TextRun({ children: [new Tab(), 'Page ', PageNumber.CURRENT, ' of ', PageNumber.TOTAL_PAGES], font:'Verdana', size:16 }),
+        ]
+      })
+    ]
+  });
+  return {
+    properties: {
+      page: { size:{width:pg.width, height:pg.height, orientation:docxLib.PageOrientation.LANDSCAPE, code:pg.code}, margin:{top:500, bottom:500, left:500, right:500} }
+    },
+    footers: { default: footer }
+  };
+}
+
+async function downloadDocx(docxLib, doc, filename){
+  const blob = await docxLib.Packer.toBlob(doc);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 2000);
+}
+
+/* One table per workstream, blue "Category" header spanning the narrow
+   vertical Workstream/Group/Sub-Category columns, horizontal Activity,
+   matching the formatting the user set as the standing reference. */
+function createTaskTableBuilder(docxLib, includeNotes, includeAssigned){
+  const { Table, TableRow, TableCell, Paragraph, TextRun, WidthType, VerticalMergeType, TextDirection, AlignmentType, VerticalAlign } = docxLib;
 
   const narrowPct = {workstream:4, group:4, sub:4, activity:13};
   const dueDatePct = 11, statusPct = 8, assignedPct = includeAssigned ? 8 : 0;
@@ -34585,14 +34677,14 @@ async function buildExportDocx(tasks, includeNotes, includeAssigned, pageSize){
 
   function buildHeaderRow(){
     const cells = [
-      textCell('Category', {fill:HEADER_FILL, bold:true, color:'FFFFFF', widthPct: categoryPct, center:true, columnSpan:3}),
-      textCell('Activity', {fill:HEADER_FILL, bold:true, color:'FFFFFF', widthPct: narrowPct.activity, center:true}),
-      textCell('Task', {fill:HEADER_FILL, bold:true, color:'FFFFFF', widthPct: taskPct, center:true}),
-      textCell('Due Date', {fill:HEADER_FILL, bold:true, color:'FFFFFF', widthPct: dueDatePct, center:true}),
-      textCell('Status', {fill:HEADER_FILL, bold:true, color:'FFFFFF', widthPct: statusPct, center:true}),
+      textCell('Category', {fill:DOCX_HEADER_FILL, bold:true, color:'FFFFFF', widthPct: categoryPct, center:true, columnSpan:3}),
+      textCell('Activity', {fill:DOCX_HEADER_FILL, bold:true, color:'FFFFFF', widthPct: narrowPct.activity, center:true}),
+      textCell('Task', {fill:DOCX_HEADER_FILL, bold:true, color:'FFFFFF', widthPct: taskPct, center:true}),
+      textCell('Due Date', {fill:DOCX_HEADER_FILL, bold:true, color:'FFFFFF', widthPct: dueDatePct, center:true}),
+      textCell('Status', {fill:DOCX_HEADER_FILL, bold:true, color:'FFFFFF', widthPct: statusPct, center:true}),
     ];
-    if(includeAssigned) cells.push(textCell('Assigned', {fill:HEADER_FILL, bold:true, color:'FFFFFF', widthPct: assignedPct, center:true}));
-    if(includeNotes) cells.push(textCell('Notes', {fill:HEADER_FILL, bold:true, color:'FFFFFF', widthPct: notesPct, center:true}));
+    if(includeAssigned) cells.push(textCell('Assigned', {fill:DOCX_HEADER_FILL, bold:true, color:'FFFFFF', widthPct: assignedPct, center:true}));
+    if(includeNotes) cells.push(textCell('Notes', {fill:DOCX_HEADER_FILL, bold:true, color:'FFFFFF', widthPct: notesPct, center:true}));
     return new TableRow({ tableHeader: true, children: cells });
   }
 
@@ -34623,15 +34715,6 @@ async function buildExportDocx(tasks, includeNotes, includeAssigned, pageSize){
     return new Table({ width:{size:100, type:WidthType.PERCENTAGE}, rows:[buildHeaderRow(), ...bodyRows] });
   }
 
-  function titleBlock(withPageBreak){
-    return [
-      new Paragraph({ pageBreakBefore: !!withPageBreak, children: [] }),
-      new Paragraph({ children: [] }),
-      new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: EXPORT_TITLE, bold:true, color:'2F5496', size:40, font:'Verdana' })] }),
-      new Paragraph({ children: [] }),
-    ];
-  }
-
   function splitByCategory(list){
     const groups = [];
     let current = null;
@@ -34645,48 +34728,160 @@ async function buildExportDocx(tasks, includeNotes, includeAssigned, pageSize){
     return groups;
   }
 
-  const groups = splitByCategory(tasks);
+  return { buildCategoryTable, splitByCategory };
+}
+
+async function buildExportDocx(tasks, includeNotes, includeAssigned, pageSize){
+  const docxLib = window.docx;
+  const { Document } = docxLib;
+  const builder = createTaskTableBuilder(docxLib, includeNotes, includeAssigned);
+  const groups = builder.splitByCategory(tasks);
   const children = [];
   groups.forEach((g, idx)=>{
-    children.push(...titleBlock(idx>0));
-    children.push(buildCategoryTable(g.items));
-  });
-
-  const PAGE_SIZES = { A4: {width:11906, height:16838, code:9}, A3: {width:16838, height:23811, code:8} };
-  const pg = PAGE_SIZES[pageSize] || PAGE_SIZES.A4;
-  const pageMargin = 500;
-  const pageContentWidth = pg.height - pageMargin - pageMargin; // landscape width minus left/right margins, in twips
-  const footer = new Footer({
-    children: [
-      new Paragraph({
-        tabStops: [{ type: TabStopType.RIGHT, position: pageContentWidth }],
-        children: [
-          new TextRun({ text: 'Downloaded on: '+fmtDateWithYear(new Date().toISOString().slice(0,10)), font:'Verdana', size:16 }),
-          new TextRun({ children: [new Tab(), 'Page ', PageNumber.CURRENT, ' of ', PageNumber.TOTAL_PAGES], font:'Verdana', size:16 }),
-        ]
-      })
-    ]
+    children.push(...buildWordTitleBlock(docxLib, idx>0, DOCX_EXPORT_TITLE));
+    children.push(builder.buildCategoryTable(g.items));
   });
 
   const doc = new Document({
-    sections: [{
-      properties: {
-        page: { size:{width:pg.width, height:pg.height, orientation:PageOrientation.LANDSCAPE, code:pg.code}, margin:{top:500, bottom:500, left:500, right:500} }
-      },
-      footers: { default: footer },
-      children: children
-    }]
+    sections: [Object.assign(buildWordPageSetup(docxLib, pageSize), { children })]
   });
 
-  const blob = await Packer.toBlob(doc);
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'Upcoming_Tasks_'+dateSuffix()+'.docx';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(()=> URL.revokeObjectURL(url), 2000);
+  await downloadDocx(docxLib, doc, 'Upcoming_Tasks_'+dateSuffix()+'.docx');
+}
+
+/* ---------------- EXPORT CALENDAR TO WORD ---------------- */
+function calendarExportTasksForMonth(year, month){
+  const catOrder = state.categories.map(c=>c.key);
+  const rows = [];
+  state.tasks.filter(calendarTaskMatches).forEach(t=>{
+    getTaskDates(t).forEach(dateStr=>{
+      const d = new Date(dateStr+'T00:00:00');
+      if(isNaN(d) || d.getFullYear()!==year || d.getMonth()!==month) return;
+      rows.push(Object.assign({}, t, {date: dateStr}));
+    });
+  });
+  rows.sort((a,b)=>{
+    const ai = catOrder.indexOf(a.category), bi = catOrder.indexOf(b.category);
+    if(ai !== bi) return ai - bi;
+    const ga = groupOfSubCategory(a.category, a.subCategory), gb = groupOfSubCategory(b.category, b.subCategory);
+    if(ga !== gb){
+      const gOrder = groupOrderForCategory(a.category);
+      let gai = gOrder.indexOf(ga); if(gai===-1) gai = 999;
+      let gbi = gOrder.indexOf(gb); if(gbi===-1) gbi = 999;
+      if(gai !== gbi) return gai - gbi;
+      return ga.localeCompare(gb);
+    }
+    if(a.subCategory !== b.subCategory) return (a.subCategory||'').localeCompare(b.subCategory||'');
+    return new Date(a.date) - new Date(b.date);
+  });
+  return rows;
+}
+
+function buildCalendarGridTable(docxLib, year, month){
+  const { Table, TableRow, TableCell, Paragraph, TextRun, WidthType, AlignmentType, VerticalAlign } = docxLib;
+  const TODAY_FILL = 'DCE6F1';
+  const HOLIDAY_FILL = 'E5E7EB';
+  const colPct = 100/7;
+
+  const dow = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const headerRow = new TableRow({
+    children: dow.map(d=> new TableCell({
+      width:{size: colPct, type: WidthType.PERCENTAGE},
+      shading: {fill: DOCX_HEADER_FILL},
+      children:[new Paragraph({alignment:AlignmentType.CENTER, children:[new TextRun({text:d, bold:true, color:'FFFFFF', font:'Verdana', size:18})]})]
+    }))
+  });
+
+  const tasksByDay = {};
+  state.tasks.filter(calendarTaskMatches).forEach(t=>{
+    getTaskDates(t).forEach(dateStr=>{
+      const d = new Date(dateStr+'T00:00:00');
+      if(isNaN(d) || d.getFullYear()!==year || d.getMonth()!==month) return;
+      const day = d.getDate();
+      if(!tasksByDay[day]) tasksByDay[day] = [];
+      tasksByDay[day].push(t);
+    });
+  });
+
+  const firstDow = (new Date(year, month, 1).getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const today = new Date();
+
+  const cells = [];
+  for(let i=0;i<firstDow;i++) cells.push(null);
+  for(let d=1; d<=daysInMonth; d++) cells.push(d);
+  while(cells.length % 7 !== 0) cells.push(null);
+
+  function dayCell(day){
+    if(day===null){
+      return new TableCell({ width:{size:colPct, type:WidthType.PERCENTAGE}, children:[new Paragraph({children:[]})] });
+    }
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const holiday = getHoliday(dateStr);
+    const isToday = today.getFullYear()===year && today.getMonth()===month && today.getDate()===day;
+    const tasks = tasksByDay[day]||[];
+    const paras = [
+      new Paragraph({ children:[new TextRun({text:String(day), bold:true, font:'Verdana', size:18})] })
+    ];
+    if(holiday){
+      paras.push(new Paragraph({children:[new TextRun({text:holiday.name, italics:true, font:'Verdana', size:14, color:'6B7280'})]}));
+    }
+    const maxLines = 5;
+    tasks.slice(0, maxLines).forEach(t=>{
+      const color = catMeta(t.category).fg.replace('#','').toUpperCase();
+      const timeLabel = (t.taskType==='Meeting/Event' && t.meetingTime) ? (t.meetingTime+' ') : '';
+      paras.push(new Paragraph({ children:[
+        new TextRun({text:'● ', color, font:'Verdana', size:14}),
+        new TextRun({text: timeLabel+truncateWords(t.description, 5), font:'Verdana', size:14})
+      ]}));
+    });
+    if(tasks.length > maxLines){
+      paras.push(new Paragraph({children:[new TextRun({text:'+'+(tasks.length-maxLines)+' more', italics:true, font:'Verdana', size:14, color:'6B7280'})]}));
+    }
+    const fill = holiday ? HOLIDAY_FILL : (isToday ? TODAY_FILL : undefined);
+    return new TableCell({
+      width:{size:colPct, type:WidthType.PERCENTAGE},
+      shading: fill ? {fill} : undefined,
+      verticalAlign: VerticalAlign.TOP,
+      children: paras
+    });
+  }
+
+  const weekRows = [];
+  for(let i=0;i<cells.length;i+=7){
+    weekRows.push(new TableRow({ children: cells.slice(i,i+7).map(dayCell) }));
+  }
+
+  return new Table({ width:{size:100, type:WidthType.PERCENTAGE}, rows:[headerRow, ...weekRows] });
+}
+
+async function buildCalendarExportDocx(pageSize){
+  const docxLib = window.docx;
+  const { Document, Paragraph, TextRun, AlignmentType } = docxLib;
+  const year = state.view.calYear, month = state.view.calMonthIndex;
+  const monthLabel = new Date(year, month, 1).toLocaleDateString('en-GB', {month:'long', year:'numeric'});
+
+  const calendarTable = buildCalendarGridTable(docxLib, year, month);
+  const monthTasks = calendarExportTasksForMonth(year, month);
+  const builder = createTaskTableBuilder(docxLib, true, false);
+  const groups = builder.splitByCategory(monthTasks);
+
+  const children = [
+    new Paragraph({ children: [] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, children:[new TextRun({text: monthLabel, bold:true, color:'2F5496', size:40, font:'Verdana'})] }),
+    new Paragraph({ children: [] }),
+    calendarTable,
+  ];
+  groups.forEach(g=>{
+    children.push(...buildWordTitleBlock(docxLib, true, DOCX_EXPORT_TITLE+' — '+monthLabel));
+    children.push(builder.buildCategoryTable(g.items));
+  });
+
+  const doc = new Document({
+    sections: [Object.assign(buildWordPageSetup(docxLib, pageSize), { children })]
+  });
+
+  await downloadDocx(docxLib, doc, 'Calendar_'+monthLabel.replace(' ','_')+'_'+dateSuffix()+'.docx');
 }
 
 /* ---------------- RENDER ALL ---------------- */
@@ -34867,6 +35062,35 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('filenameModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='filenameModalOverlay') closeFilenameModal(); });
   document.getElementById('filenameInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') confirmFilenameAndDownload(); });
 
+  document.getElementById('btnOpenExportCalendar').addEventListener('click', openExportCalendarModal);
+  document.getElementById('exportCalendarModalClose').addEventListener('click', closeExportCalendarModal);
+  document.getElementById('btnCancelExportCalendar').addEventListener('click', closeExportCalendarModal);
+  document.getElementById('exportCalendarModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='exportCalendarModalOverlay') closeExportCalendarModal(); });
+  document.querySelectorAll('#exportCalendarPageSizeToggle .seg-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('#exportCalendarPageSizeToggle .seg-btn').forEach(b=> b.classList.remove('active'));
+      btn.classList.add('active');
+      exportCalendarPageSize = btn.dataset.size;
+    });
+  });
+  document.getElementById('btnConfirmExportCalendar').addEventListener('click', async ()=>{
+    if(!window.docx){
+      toast('The Word export library failed to initialize — please reload the page and try again', 'error');
+      return;
+    }
+    const btn = document.getElementById('btnConfirmExportCalendar');
+    btn.disabled = true; btn.textContent = 'Building...';
+    try{
+      await buildCalendarExportDocx(exportCalendarPageSize);
+      closeExportCalendarModal();
+      toast('Calendar exported to Word');
+    }catch(e){
+      console.error('Calendar export to Word failed:', e);
+      toast('Could not build the Word file: '+(e && e.message ? e.message : e), 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Export to Word';
+    }
+  });
   document.getElementById('btnOpenExportTasks').addEventListener('click', openExportTasksModal);
   document.getElementById('exportTasksModalClose').addEventListener('click', closeExportTasksModal);
   document.getElementById('btnCancelExportTasks').addEventListener('click', closeExportTasksModal);
