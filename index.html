@@ -31150,6 +31150,7 @@ tr.task-detail-row td{background:var(--panel-2); padding:16px 20px; border-top:n
       </div>
       <div class="form-grid">
         <div class="form-row"><label id="f_dateLabel">Due Date</label><input type="date" id="f_date"></div>
+        <div class="form-row" id="meetingTimeRow" style="display:none;"><label>Meeting Time</label><input type="time" id="f_meetingTime"></div>
         <div class="form-row"><label>Assigned Person</label><select id="f_assignedPerson"><option value="">Unassigned</option></select></div>
       </div>
       <div class="form-grid">
@@ -31670,6 +31671,7 @@ function loadState(){
       state.calendarVisibleTypes = saved.calendarVisibleTypes && saved.calendarVisibleTypes.length ? saved.calendarVisibleTypes : state.calendarDefaultTypes.slice();
       state.subCategoryOrder = saved.subCategoryOrder || {};
       state.activityOrder = saved.activityOrder || {};
+      state.activityRegistry = saved.activityRegistry || {};
       state.subCategoryGroups = saved.subCategoryGroups || defaultSubCategoryGroups();
       state.activityStatusOverride = saved.activityStatusOverride || {};
       state.holidays = Array.isArray(saved.holidays) ? saved.holidays : DEFAULT_HOLIDAYS.slice();
@@ -31695,6 +31697,7 @@ function loadState(){
   }
   if(!state.todoCategory) state.todoCategory = state.categories[0].key;
   if(!Array.isArray(state.todoDocs)) state.todoDocs = [];
+  if(!state.activityRegistry || typeof state.activityRegistry !== 'object') state.activityRegistry = {};
   if(!state.calendarDefaultTypes || !state.calendarDefaultTypes.length) state.calendarDefaultTypes = ['Meeting/Event'];
   if(!state.calendarVisibleTypes || !state.calendarVisibleTypes.length) state.calendarVisibleTypes = state.calendarDefaultTypes.slice();
   if(!Array.isArray(state.holidays)) state.holidays = DEFAULT_HOLIDAYS.slice();
@@ -31708,7 +31711,7 @@ function persistLocal(){
     sheetsUrl: state.sheetsUrl, categories: state.categories, taskTypes: state.taskTypes, subCategories: state.subCategories,
     assignablePeople: state.assignablePeople, calendarDefaultTypes: state.calendarDefaultTypes, calendarVisibleTypes: state.calendarVisibleTypes,
     subCategoryOrder: state.subCategoryOrder, activityOrder: state.activityOrder, holidays: state.holidays,
-    subCategoryGroups: state.subCategoryGroups, activityStatusOverride: state.activityStatusOverride});
+    subCategoryGroups: state.subCategoryGroups, activityStatusOverride: state.activityStatusOverride, activityRegistry: state.activityRegistry});
   localStorage.setItem(LS_KEY, encryptText(payload, SHARED_DB_KEY));
 }
 
@@ -31716,6 +31719,26 @@ function registerSubCategory(categoryKey, subCat){
   if(!subCat) return;
   if(!state.subCategories[categoryKey]) state.subCategories[categoryKey] = [];
   if(!state.subCategories[categoryKey].includes(subCat)) state.subCategories[categoryKey].push(subCat);
+}
+function registerActivity(categoryKey, subCat, activity){
+  if(!activity) return;
+  const key = categoryKey + ACTIVITY_KEY_SEP + subCat;
+  if(!state.activityRegistry[key]) state.activityRegistry[key] = [];
+  if(!state.activityRegistry[key].includes(activity)) state.activityRegistry[key].push(activity);
+}
+function addActivityNamed(categoryKey, subCat, name){
+  const trimmed = (name||'').trim();
+  if(!trimmed){ toast('Enter an activity name', 'error'); return false; }
+  const key = categoryKey + ACTIVITY_KEY_SEP + subCat;
+  const existingTaskActs = Object.keys(groupHierarchy(state.tasks.filter(t=>t.category===categoryKey))[subCat] || {});
+  const existingRegActs = state.activityRegistry[key] || [];
+  if([...existingTaskActs, ...existingRegActs].some(a=>a.toLowerCase()===trimmed.toLowerCase())){
+    toast('That activity already exists', 'error'); return false;
+  }
+  registerActivity(categoryKey, subCat, trimmed);
+  persistLocal();
+  toast('Activity added');
+  return true;
 }
 function registerTaskType(taskType){
   if(!taskType) return;
@@ -31772,7 +31795,8 @@ function taskToSheetRow(t){
     PrivateNotes: JSON.stringify(t.privateNotes||{}),
     Checklist: JSON.stringify(t.checklist||[]),
     LinkedActivities: JSON.stringify(t.linkedActivities||[]),
-    MeetingDates: JSON.stringify(t.meetingDates||[])
+    MeetingDates: JSON.stringify(t.meetingDates||[]),
+    MeetingTime: t.meetingTime||''
   };
 }
 function sheetRowToTask(r){
@@ -31790,7 +31814,8 @@ function sheetRowToTask(r){
     status: r.Status||'Not Started', statusComment: r.StatusComment||'', revisedDate: r.RevisedDate||'',
     links: r.Links||'', comments: r.Comments||'', createdDate: r.CreatedDate||'',
     completionDate: r.CompletionDate||'', hoursSpent: r.HoursSpent||'', nDrivePath: r.NDrivePath||'',
-    closureNotes: r.ClosureNotes||'', cancellationCategory: r.CancellationCategory||'', privateNotes, checklist, linkedActivities, meetingDates
+    closureNotes: r.ClosureNotes||'', cancellationCategory: r.CancellationCategory||'', privateNotes, checklist, linkedActivities, meetingDates,
+    meetingTime: r.MeetingTime||''
   };
 }
 async function sheetsPost(payload){
@@ -32147,8 +32172,12 @@ function renameActivity(catKey, subCategory, oldActivity){
       }
       if(changed) touched.push(t);
     });
-    if(!touched.length){ toast('No tasks found for that activity', 'error'); return; }
     const actOrderKey = catKey + ACTIVITY_KEY_SEP + subCategory;
+    const registryHadIt = (state.activityRegistry[actOrderKey]||[]).includes(oldActivity);
+    if(!touched.length && !registryHadIt){ toast('No tasks found for that activity', 'error'); return; }
+    if(registryHadIt){
+      state.activityRegistry[actOrderKey] = state.activityRegistry[actOrderKey].map(a=> a===oldActivity ? trimmed : a);
+    }
     if(state.activityOrder[actOrderKey]){
       state.activityOrder[actOrderKey] = state.activityOrder[actOrderKey].map(a=> a===oldActivity ? trimmed : a);
     }
@@ -32165,7 +32194,7 @@ function renameActivity(catKey, subCategory, oldActivity){
     persistLocal();
     if(overrideTouched) pushConfigToSheet('activityStatusOverrides', state.activityStatusOverride);
     renderAll();
-    toast('Renamed to "'+trimmed+'" — updated '+touched.length+' task(s)');
+    toast(touched.length ? ('Renamed to "'+trimmed+'" — updated '+touched.length+' task(s)') : ('Renamed to "'+trimmed+'"'));
     syncTasksToSheet(touched);
   });
 }
@@ -32265,6 +32294,7 @@ async function saveTaskFromForm(){
     activity: document.getElementById('f_activity').value.trim(),
     taskType,
     meetingDates,
+    meetingTime: taskType==='Meeting/Event' ? document.getElementById('f_meetingTime').value.trim() : '',
     description: document.getElementById('f_description').value.trim(),
     assignedPerson: document.getElementById('f_assignedPerson').value.trim(),
     status: document.getElementById('f_status').value,
@@ -32285,6 +32315,7 @@ async function saveTaskFromForm(){
   if(!task.description){ toast('Task description is required', 'error'); return; }
 
   registerSubCategory(task.category, task.subCategory);
+  registerActivity(task.category, task.subCategory, task.activity);
   registerTaskType(task.taskType);
 
   if(currentUser){
@@ -32316,6 +32347,10 @@ async function deleteTask(id){
   if(!confirm('Delete this task? This cannot be undone.')) return;
   const task = state.tasks.find(t=>t.id===id);
   state.tasks = state.tasks.filter(t=>t.id!==id);
+  if(task && state.view.activity===task.activity && state.view.subCategory===task.subCategory && state.view.category===task.category){
+    const stillHasTasks = state.tasks.some(t=> t.category===task.category && t.subCategory===task.subCategory && t.activity===task.activity);
+    if(!stillHasTasks) state.view.activity = null;
+  }
   persistLocal();
   closeModal();
   renderAll();
@@ -32347,6 +32382,7 @@ function updateChecklistVisibility(){
   const isMeeting = document.getElementById('f_taskType').value.trim() === 'Meeting/Event';
   document.getElementById('checklistBox').style.display = isMeeting ? '' : 'none';
   document.getElementById('meetingDatesBox').style.display = isMeeting ? '' : 'none';
+  document.getElementById('meetingTimeRow').style.display = isMeeting ? '' : 'none';
   document.getElementById('f_dateLabel').textContent = isMeeting ? 'Meeting Date' : 'Due Date';
 }
 function renderMeetingDatesItems(){
@@ -32426,6 +32462,7 @@ function openModal(task, prefill){
   populateCategorySelect(document.getElementById('f_category'), category);
   f('f_month', task ? task.month : (prefill&&prefill.month) || MONTHS[new Date().getMonth()]);
   f('f_date', task ? task.date : '');
+  f('f_meetingTime', task ? task.meetingTime : '');
   f('f_subCategory', task ? task.subCategory : (prefill&&prefill.subCategory) || '');
   f('f_activity', task ? task.activity : (prefill&&prefill.activity) || '');
   f('f_taskType', task ? task.taskType : 'Administrative');
@@ -33650,7 +33687,13 @@ function renderCategoryView(){
   if(!state.view.activity){
     const acts = hier[state.view.subCategory] || {};
     const actOrderKey = state.view.category + ACTIVITY_KEY_SEP + state.view.subCategory;
-    const allActs = applyCustomOrder(Object.keys(acts), state.activityOrder[actOrderKey]);
+    const knownActs = [...new Set([...Object.keys(acts), ...(state.activityRegistry[actOrderKey]||[])])];
+    const allActs = applyCustomOrder(knownActs, state.activityOrder[actOrderKey]);
+    addBtn.style.display = '';
+    addBtn.textContent = '+ Add Activity';
+    addBtn.onclick = ()=> openRenameModal('Add Activity', '', (name)=>{
+      if(addActivityNamed(state.view.category, state.view.subCategory, name)) renderCategoryView();
+    }, {labelText:'Activity name', confirmText:'Add', placeholder:'e.g. Kickoff Meeting'});
     if(allActs.length>1){
       reorderBtn.style.display = '';
       reorderBtn.onclick = ()=> openReorderModal('Reorder Activities', allActs, (newOrder)=>{
@@ -33668,10 +33711,13 @@ function renderCategoryView(){
         renderCategoryView();
       });
     });
-    const actNames = allActs.filter(ac=> !state.view.activityStageFilter || effectiveActivityStage(state.view.category, state.view.subCategory, ac, acts[ac])===state.view.activityStageFilter);
-    if(!actNames.length){ body.innerHTML = emptyHtml('No activities match this filter.'); return; }
+    const actNames = allActs.filter(ac=> !state.view.activityStageFilter || effectiveActivityStage(state.view.category, state.view.subCategory, ac, acts[ac]||[])===state.view.activityStageFilter);
+    if(!actNames.length){
+      body.innerHTML = emptyHtml(allActs.length ? 'No activities match this filter.' : 'No activities yet — use "+ Add Activity" above to create one.');
+      return;
+    }
     body.innerHTML = `<div class="card-grid">` + actNames.map(ac=>{
-      const tasks = acts[ac];
+      const tasks = acts[ac]||[];
       const stage = effectiveActivityStage(state.view.category, state.view.subCategory, ac, tasks);
       const overridden = isActivityStageOverridden(state.view.category, state.view.subCategory, ac);
       return `<div class="entity-card" data-act="${escapeHtml(ac)}">
@@ -33704,7 +33750,7 @@ function renderCategoryView(){
     return;
   }
 
-  const allTasks = (hier[state.view.subCategory][state.view.activity]||[]);
+  const allTasks = ((hier[state.view.subCategory]||{})[state.view.activity]||[]);
   const statuses = ['All', ...new Set(allTasks.map(t=>t.status))];
   const taskTypesPresent = [...new Set(allTasks.map(t=>t.taskType).filter(Boolean))].sort();
   filterRow.innerHTML = statuses.map(s=>`<div class="chip ${state.view.statusFilter===s || (!state.view.statusFilter&&s==='All')?'active':''}" data-status="${escapeHtml(s)}">${escapeHtml(s)}</div>`).join('')
@@ -33758,7 +33804,7 @@ function taskDetailHtml(t){
     detailField('Status', t.status),
     detailField('Status Comment', t.statusComment),
     detailField('Comments', t.comments, 'wide'),
-    detailField('Due Date', fmtDateWithYear(t.date)),
+    detailField('Due Date', fmtDateWithYear(t.date) + (t.meetingTime ? ' at '+t.meetingTime : '')),
     detailField('Completion Date', fmtDateWithYear(t.completionDate)),
     detailField('Revised Date', t.revisedDate),
     detailField('Delay', isDelayed(t) ? (delayDays(t) + ' day' + (delayDays(t)===1?'':'s') + ' late') : ''),
