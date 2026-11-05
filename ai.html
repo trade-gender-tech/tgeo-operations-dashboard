@@ -34654,7 +34654,7 @@ async function downloadDocx(docxLib, doc, filename){
    vertical Workstream/Group/Sub-Category columns, horizontal Activity,
    matching the formatting the user set as the standing reference. */
 function createTaskTableBuilder(docxLib, includeNotes, includeAssigned){
-  const { Table, TableRow, TableCell, Paragraph, TextRun, WidthType, VerticalMergeType, TextDirection, AlignmentType, VerticalAlign } = docxLib;
+  const { Table, TableRow, TableCell, Paragraph, TextRun, WidthType, VerticalMergeType, TextDirection, AlignmentType, VerticalAlign, HeightRule } = docxLib;
 
   const narrowPct = {workstream:4, group:4, sub:4, activity:13};
   const dueDatePct = 11, statusPct = 8, assignedPct = includeAssigned ? 8 : 0;
@@ -34712,7 +34712,7 @@ function createTaskTableBuilder(docxLib, includeNotes, includeAssigned){
       ];
       if(includeAssigned) cells.push(textCell(t.assignedPerson||'', {widthPct: assignedPct}));
       if(includeNotes) cells.push(textCell(t.comments||'', {widthPct: notesPct}));
-      return new TableRow({ children: cells });
+      return new TableRow({ height:{value: 720, rule: HeightRule.ATLEAST}, children: cells });
     });
     return new Table({ width:{size:100, type:WidthType.PERCENTAGE}, rows:[buildHeaderRow(), ...bodyRows] });
   }
@@ -34779,14 +34779,25 @@ function calendarExportTasksForMonth(year, month){
   return rows;
 }
 
-function buildCalendarGridTable(docxLib, year, month){
-  const { Table, TableRow, TableCell, Paragraph, TextRun, WidthType, AlignmentType, VerticalAlign } = docxLib;
-  const TODAY_FILL = 'DCE6F1';
+/* Blends a hex color toward white, approximating the on-screen calendar's
+   translucent day-cell background (CSS alpha) as a solid Word cell fill. */
+function tintColorForWord(hex, alphaFrac){
+  hex = (hex||'').replace('#','');
+  const r = parseInt(hex.substr(0,2),16), g = parseInt(hex.substr(2,2),16), b = parseInt(hex.substr(4,2),16);
+  const blend = (c)=> Math.round(c*alphaFrac + 255*(1-alphaFrac));
+  const toHex = (n)=> n.toString(16).padStart(2,'0').toUpperCase();
+  return toHex(blend(r))+toHex(blend(g))+toHex(blend(b));
+}
+
+function buildCalendarGridTable(docxLib, year, month, pageSize){
+  const { Table, TableRow, TableCell, Paragraph, TextRun, WidthType, AlignmentType, VerticalAlign, HeightRule } = docxLib;
   const HOLIDAY_FILL = 'E5E7EB';
   const colPct = 100/7;
 
   const dow = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const headerRowHeight = 400;
   const headerRow = new TableRow({
+    height: {value: headerRowHeight, rule: HeightRule.ATLEAST},
     children: dow.map(d=> new TableCell({
       width:{size: colPct, type: WidthType.PERCENTAGE},
       shading: {fill: DOCX_HEADER_FILL},
@@ -34807,7 +34818,6 @@ function buildCalendarGridTable(docxLib, year, month){
 
   const firstDow = (new Date(year, month, 1).getDay() + 6) % 7;
   const daysInMonth = new Date(year, month+1, 0).getDate();
-  const today = new Date();
 
   const cells = [];
   for(let i=0;i<firstDow;i++) cells.push(null);
@@ -34820,7 +34830,6 @@ function buildCalendarGridTable(docxLib, year, month){
     }
     const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     const holiday = getHoliday(dateStr);
-    const isToday = today.getFullYear()===year && today.getMonth()===month && today.getDate()===day;
     const tasks = tasksByDay[day]||[];
     const paras = [
       new Paragraph({ children:[new TextRun({text:String(day), bold:true, font:'Verdana', size:18})] })
@@ -34840,7 +34849,11 @@ function buildCalendarGridTable(docxLib, year, month){
     if(tasks.length > maxLines){
       paras.push(new Paragraph({children:[new TextRun({text:'+'+(tasks.length-maxLines)+' more', italics:true, font:'Verdana', size:14, color:'6B7280'})]}));
     }
-    const fill = holiday ? HOLIDAY_FILL : (isToday ? TODAY_FILL : undefined);
+    let fill = holiday ? HOLIDAY_FILL : undefined;
+    if(!holiday && tasks.length){
+      const colors = dayCategoryColors(tasks);
+      if(colors.length) fill = tintColorForWord(colors[0], 0.22);
+    }
     return new TableCell({
       width:{size:colPct, type:WidthType.PERCENTAGE},
       shading: fill ? {fill} : undefined,
@@ -34849,9 +34862,19 @@ function buildCalendarGridTable(docxLib, year, month){
     });
   }
 
+  const numWeeks = cells.length / 7;
+  const pg = DOCX_PAGE_SIZES[pageSize] || DOCX_PAGE_SIZES.A4;
+  const landscapeHeight = pg.width; // see buildWordPageSetup: width/height swap for landscape
+  const pageMargin = 500;
+  const contentHeight = landscapeHeight - pageMargin*2;
+  const titleBlockHeight = 1700; // approx space used by the blank/title/blank paragraphs above the table
+  const safetyFactor = 0.93; // leave headroom since cell padding/line-height vary slightly by renderer
+  const availableForWeeks = Math.max(300, (contentHeight - titleBlockHeight - headerRowHeight) * safetyFactor);
+  const weekRowHeight = Math.floor(availableForWeeks / numWeeks);
+
   const weekRows = [];
   for(let i=0;i<cells.length;i+=7){
-    weekRows.push(new TableRow({ children: cells.slice(i,i+7).map(dayCell) }));
+    weekRows.push(new TableRow({ height:{value: weekRowHeight, rule: HeightRule.ATLEAST}, children: cells.slice(i,i+7).map(dayCell) }));
   }
 
   return new Table({ width:{size:100, type:WidthType.PERCENTAGE}, rows:[headerRow, ...weekRows] });
@@ -34863,7 +34886,7 @@ async function buildCalendarExportDocx(pageSize){
   const year = state.view.calYear, month = state.view.calMonthIndex;
   const monthLabel = new Date(year, month, 1).toLocaleDateString('en-GB', {month:'long', year:'numeric'});
 
-  const calendarTable = buildCalendarGridTable(docxLib, year, month);
+  const calendarTable = buildCalendarGridTable(docxLib, year, month, pageSize);
   const monthTasks = calendarExportTasksForMonth(year, month);
   const builder = createTaskTableBuilder(docxLib, true, false);
   const groups = builder.splitByCategory(monthTasks);
